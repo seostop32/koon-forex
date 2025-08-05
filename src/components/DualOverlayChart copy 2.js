@@ -54,7 +54,7 @@ const generateSignals = (candles) => {
 const DualOverlayChart = () => {
   const containerRef = useRef(null);
   const [widget, setWidget] = useState(null);
-  const [chartSize, setChartSize] = useState({ width: 0, height: window.innerHeight });
+  const [chartSize, setChartSize] = useState({ width: 0, height: 500 });
   const [candles] = useState(generateFakeCandles());
   const [signals, setSignals] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
@@ -87,7 +87,7 @@ const DualOverlayChart = () => {
           hide_top_toolbar: true,
           container_id: 'tradingview_chart',
           width: containerRef.current.clientWidth,
-          height: window.innerHeight,
+          height: 500,
           autosize: false,
           onChartReady: () => {
             setWidget(w);
@@ -169,7 +169,7 @@ const DualOverlayChart = () => {
     <div
       ref={containerRef}
       id="tradingview_chart"
-      style={{ position: 'relative', width: '100%', height: '100vh' }}
+      style={{ position: 'relative', width: '100%', height: 500 }}
     >
       {/* 신호 오버레이 */}
       <div

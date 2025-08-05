@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TradingView Test</title>
+  <style>
+    #chart {
+      width: 100%;
+      height: 600px;
+    }
+  </style>
+</head>
+<body>
+  <div id="chart"></div>
+
+  <script src="https://s3.tradingview.com/tv.js"></script>
+  <script>
+    new TradingView.widget({
+      symbol: 'FX:EURUSD',
+      interval: '1',
+      timezone: 'Asia/Seoul',
+      theme: 'light',
+      style: '1',
+      locale: 'en',
+      toolbar_bg: '#f1f3f6',
+      enable_publishing: false,
+      container_id: 'chart',
+      autosize: true,
+      hide_top_toolbar: true,
+      withdateranges: true,
+      studies: [],
+      onChartReady: function () {
+        const chart = this.chart();
+
+        setTimeout(() => {
+          const visibleRange = chart.timeScale().getVisibleRange();
+          console.log('✅ visibleRange:', visibleRange);
+
+          if (!visibleRange || visibleRange.from === visibleRange.to) {
+            console.warn('❌ visibleRange가 유효하지 않음');
+          } else {
+            console.log('🎯 from:', visibleRange.from, 'to:', visibleRange.to);
+          }
+        }, 2000);
+      }
+    });
+  </script>
+</body>
+</html>
