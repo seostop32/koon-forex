@@ -98,12 +98,33 @@ function showAlert(signal, realTimePrice) {
   alert(`[${type}] ${action} 신호 발생 - 시그널가격: ${signal.price.toFixed(5)}, 현재가: ${realTimePrice.toFixed(5)} (${new Date(signal.time).toLocaleTimeString()})`);
 }
 
+
+const ALERT_TIME_WINDOW = 5 * 60 * 1000; // 5분 (밀리초)
+
+
+const alertedSignals = new Set(); // 이미 얼러트한 시그널 고유 키 저장용
+
 setInterval(() => {
+  const now = Date.now();
+
   const lastPrice = candles[candles.length - 1].close;
   const newCandle = generateFakeCandles(1, lastPrice)[0];
   candles.push(newCandle);
   candles = candles.slice(-50);
 
-  const newSignals = generateSignals(candles);
-  newSignals.forEach(showAlert);
+  const allSignals = generateSignals(candles);
+
+  // 아직 얼러트 안한 신호만 필터링
+  const newSignals = allSignals.filter(signal => {
+    // 시그널 고유키: 타입+시간 (필요시 가격 포함 가능)
+    const key = `${signal.type}_${signal.entry ? 'entry' : 'exit'}_${signal.time}`;
+    if (alertedSignals.has(key)) return false;
+    alertedSignals.add(key);
+    return true;
+  });
+
+  newSignals.forEach(signal => {
+    showAlert(signal, candles[candles.length -1].close);
+  });
+
 }, 10000);

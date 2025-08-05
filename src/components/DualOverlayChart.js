@@ -1,20 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RSI, MACD, SMA } from 'technicalindicators';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-// Fake 캔들 생성 (1분봉 50개)
-const generateFakeCandles = () => {
+// 1분봉 가짜 캔들 생성 함수 (50개)
+const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
-  return Array.from({ length: 50 }, (_, i) => ({
-    time: now - (49 - i) * 60,
-    open: 1.1 + Math.random() * 0.01,
-    high: 1.11 + Math.random() * 0.01,
-    low: 1.09 + Math.random() * 0.01,
-    close: 1.1 + Math.random() * 0.01,
-    volume: 1000 + Math.floor(Math.random() * 500),
-  }));
+  return Array.from({ length: count }, (_, i) => {
+    const base = startPrice;
+    const cp = base + Math.random() * 0.01;
+    return {
+      time: now - (count - 1 - i) * 60,
+      open: cp,
+      high: cp + Math.random() * 0.005,
+      low: cp - Math.random() * 0.005,
+      close: cp,
+      volume: 1000 + Math.floor(Math.random() * 500),
+    };
+  });
 };
 
-// 신호 생성 (fake signal)
+// 신호 생성 함수 (진입/청산 분리, 5틱 이상 수익 기준)
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
@@ -32,22 +38,49 @@ const generateSignals = (candles) => {
 
   const signals = [];
 
-  for (let i = 26; i < closes.length; i++) {
+  let currentState = 'flat'; // flat | long | short
+  let entryPrice = null;
+  const tickSize = 0.0001;
+  const minProfit = tickSize * 5;
+
+  for (let i = 26; i < candles.length; i++) {
+    const time = candles[i].time * 1000; // ms 단위
+    const price = candles[i].close;
     const rsiVal = rsi[i - 12];
     const macdVal = macd[i - 26];
     const avgVol = volumeMA[i - 10];
-    const volume = volumes[i];
-    const time = candles[i].time * 1000; // ms 단위
+    const vol = volumes[i];
 
-    if (!macdVal || rsiVal === undefined || !avgVol) continue;
+    if (!macdVal || rsiVal == null || !avgVol) continue;
 
-    if (macdVal.MACD > macdVal.signal && rsiVal < 60 && volume > avgVol * 0.8) {
-      signals.push({ type: 'buy', time });
+    // 진입 신호
+    if (currentState === 'flat') {
+      if (macdVal.MACD > macdVal.signal && rsiVal < 60 && vol > avgVol * 0.8) {
+        currentState = 'long';
+        entryPrice = price;
+        signals.push({ type: 'buy', entry: true, time, price });
+      } else if (macdVal.MACD < macdVal.signal && rsiVal > 40 && vol < avgVol * 1.2) {
+        currentState = 'short';
+        entryPrice = price;
+        signals.push({ type: 'sell', entry: true, time, price });
+      }
     }
-    if (macdVal.MACD < macdVal.signal && rsiVal > 40 && volume < avgVol * 1.2) {
-      signals.push({ type: 'sell', time });
+    // 청산 신호 (5틱 이상 벌었을 때)
+    else if (currentState === 'long') {
+      if (price >= entryPrice + minProfit) {
+        currentState = 'flat';
+        signals.push({ type: 'buy', entry: false, time, price });
+        entryPrice = null;
+      }
+    } else if (currentState === 'short') {
+      if (price <= entryPrice - minProfit) {
+        currentState = 'flat';
+        signals.push({ type: 'sell', entry: false, time, price });
+        entryPrice = null;
+      }
     }
   }
+
   return signals;
 };
 
@@ -55,18 +88,14 @@ const DualOverlayChart = () => {
   const containerRef = useRef(null);
   const [widget, setWidget] = useState(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: window.innerHeight });
-  const [candles] = useState(generateFakeCandles());
+  const [candles, setCandles] = useState(generateFakeCandles());
   const [signals, setSignals] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
 
-  // 신호 생성 및 설정
-  useEffect(() => {
-    const newSignals = generateSignals(candles);
-    setSignals(newSignals);
-    // console.log('⚡ signals generated:', newSignals.length);
-  }, [candles]);
+  // 중복 얼러트 방지용 Set
+  const alertedSignalsRef = useRef(new Set());
 
-  // TradingView 위젯 생성
+  // TradingView 위젯 로드 및 생성
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -96,9 +125,7 @@ const DualOverlayChart = () => {
                 const chart = w.chart();
                 const range = chart.timeScale().getVisibleRange();
                 if (range) setVisibleRange(range);
-              } catch {
-                // console.warn('Chart not ready at onChartReady');
-              }
+              } catch {}
             }, 1000);
           }
         });
@@ -111,7 +138,7 @@ const DualOverlayChart = () => {
     };
   }, []);
 
-  // ResizeObserver로 크기 감지
+  // ResizeObserver로 차트 크기 감지
   useEffect(() => {
     if (!containerRef.current) return;
     const ro = new ResizeObserver(entries => {
@@ -143,10 +170,8 @@ const DualOverlayChart = () => {
       }
     };
 
-    // 최초 호출
     onRangeChanged();
 
-    // 구독 시작
     chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChanged);
 
     return () => {
@@ -154,18 +179,65 @@ const DualOverlayChart = () => {
     };
   }, [widget]);
 
+  // 10초마다 새로운 캔들 생성 및 시그널 업데이트, 얼러트 발생
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCandles(prevCandles => {
+        const lastPrice = prevCandles[prevCandles.length - 1].close;
+        const newCandle = generateFakeCandles(1, lastPrice)[0];
+        const newCandles = [...prevCandles.slice(1), newCandle];
+
+        // 신호 생성
+        const newSignals = generateSignals(newCandles);
+
+        // 새로 생긴 신호 중 아직 얼러트 안 띄운 거만 띄우기 + 현재시간 지나면 스킵
+        const now = Date.now();
+        newSignals.forEach(sig => {
+          if (
+            !alertedSignalsRef.current.has(sig.time) && 
+            sig.time >= now // 현재시간 지나면 스킵
+          ) {
+            showAlert(sig);
+            alertedSignalsRef.current.add(sig.time);
+          }
+        });
+
+        setSignals(newSignals);
+        return newCandles;
+      });
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [signals]);
+
+  // 얼러트 함수
+  const showAlert = (signal) => {
+    const action = signal.entry ? '진입' : '청산';
+    const type = signal.type === 'buy' ? '매수' : '매도';
+    toast.info(
+      `[${type}] ${action} 신호\n가격: ${signal.price.toFixed(5)}\n시간: ${new Date(signal.time).toLocaleTimeString()}`, 
+      {
+        position: 'top-center',
+        autoClose: 3000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: 'colored',
+      }
+    );
+  };
+
   // 시간(ms) -> x 좌표 변환
   const timeToX = (time) => {
-    if (!visibleRange || chartSize.width === 0) {
-      return -1000;
-    }
+    if (!visibleRange || chartSize.width === 0) return -1000;
     const { from, to } = visibleRange;
     if (from === to) return -1000;
-    const x = ((time / 1000 - from) / (to - from)) * chartSize.width;
-    return x;
+    return ((time / 1000 - from) / (to - from)) * chartSize.width;
   };
 
   return (
+    <>
     <div
       ref={containerRef}
       id="tradingview_chart"
@@ -186,20 +258,19 @@ const DualOverlayChart = () => {
       >
         {visibleRange && chartSize.width > 0 && signals.map((sig, i) => {
           const x = timeToX(sig.time);
-          console.log(`Signal ${sig.type} at x=${x}`);
           if (x < 0 || x > chartSize.width) return null;
           return (
             <div
               key={i}
-              title={`${sig.type.toUpperCase()} Signal at ${new Date(sig.time).toLocaleTimeString()}`}
+              title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} 신호 (${new Date(sig.time).toLocaleTimeString()})`}
               style={{
                 position: 'absolute',
                 left: x - 15,
-                top: 100, // 좀 더 밑으로 내려봤어
+                top: 100,
                 width: 30,
                 height: 30,
                 borderRadius: '50%',
-                backgroundColor: sig.type === 'buy' ? 'green' : 'red',
+                backgroundColor: sig.type === 'buy' ? (sig.entry ? 'green' : '#00aa00') : (sig.entry ? 'red' : '#aa0000'),
                 color: 'white',
                 fontWeight: 'bold',
                 textAlign: 'center',
@@ -209,12 +280,14 @@ const DualOverlayChart = () => {
                 pointerEvents: 'none',
               }}
             >
-              {sig.type === 'buy' ? 'B' : 'S'}
+              {sig.type === 'buy' ? (sig.entry ? 'B' : 'b') : (sig.entry ? 'S' : 's')}
             </div>
           );
         })}
       </div>
     </div>
+    <ToastContainer limit={1} /> {/* <-- 요거 꼭 있어야 함! */}
+    </>
   );
 };
 

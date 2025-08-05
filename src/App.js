@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import DualOverlayChart from './components/DualOverlayChart';
-import TradeAlert from './components/TradeAlert';
+// import TradeAlert from './components/TradeAlert';
 import { generateFakeCandles, generateSignals } from './components/signalUtils';
 
 function App() {
@@ -17,7 +17,7 @@ function App() {
   return (
     <ErrorBoundary>
       <DualOverlayChart signals={signals} />
-      <TradeAlert signals={signals} />
+      {/* <TradeAlert signals={signals} /> */}
     </ErrorBoundary>
   );
 }
