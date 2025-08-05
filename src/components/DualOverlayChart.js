@@ -3,7 +3,7 @@ import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// 가짜 캔들 생성 함수
+// 1분봉 가짜 캔들 생성
 const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
@@ -19,7 +19,7 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   });
 };
 
-// 신호 생성 함수
+// 신호 생성
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
@@ -153,10 +153,16 @@ const DualOverlayChart = () => {
 
         newSigs.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
-          if (!alertedSignals.current.has(key) && sig.time >= now - 3000) {
+          if (!alertedSignals.current.has(key) && sig.time >= now - 5000) {
+            console.log('🔔 알림 발생:', sig); // 디버깅용 로그
             toast.info(
               `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'} 신호\n가격:${sig.price.toFixed(5)}\n시간:${new Date(sig.time).toLocaleTimeString()}`,
-              { position: 'bottom-center', autoClose: 3000, hideProgressBar: true, theme: 'colored' }
+              {
+                position: 'bottom-center',
+                autoClose: 3000,
+                hideProgressBar: true,
+                theme: 'colored',
+              }
             );
             alertedSignals.current.add(key);
           }
@@ -178,26 +184,50 @@ const DualOverlayChart = () => {
   return (
     <>
       <div ref={containerRef} id="tradingview_chart" style={{ position: 'relative', width: '100%', height: '100vh' }}>
-        <div style={{ position: 'absolute', top:0,left:0,width:chartSize.width,height:chartSize.height, pointerEvents:'none', userSelect:'none', zIndex:9999 }}>
-          {visibleRange && chartSize.width > 0 && signals.map((sig,i) => {
+        <div style={{ position: 'absolute', top: 0, left: 0, width: chartSize.width, height: chartSize.height, pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}>
+          {visibleRange && chartSize.width > 0 && signals.map((sig, i) => {
             const x = timeToX(sig.time);
-            if (x<0||x>chartSize.width) return null;
+            if (x < 0 || x > chartSize.width) return null;
             return (
               <div key={i}
-                title={`${sig.type.toUpperCase()} ${sig.entry?'진입':'청산'} - ${new Date(sig.time).toLocaleTimeString()}`}
+                title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} - ${new Date(sig.time).toLocaleTimeString()}`}
                 style={{
-                  position:'absolute', left:x-15, top:100, width:30,height:30,borderRadius:'50%',
-                  backgroundColor: sig.type==='buy' ? (sig.entry? 'green':'#00aa00') : (sig.entry? 'red':'#aa0000'),
-                  color:'white',fontWeight:'bold',textAlign:'center',lineHeight:'30px',border:'2px solid yellow',
-                  userSelect:'none',pointerEvents:'none'
+                  position: 'absolute',
+                  left: x - 15,
+                  top: 100,
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  backgroundColor: sig.type === 'buy' ? (sig.entry ? 'green' : '#00aa00') : (sig.entry ? 'red' : '#aa0000'),
+                  color: 'white',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  lineHeight: '30px',
+                  border: '2px solid yellow',
+                  userSelect: 'none',
+                  pointerEvents: 'none'
                 }}>
-                {sig.type==='buy' ? (sig.entry?'B':'b') : (sig.entry?'S':'s')}
+                {sig.type === 'buy' ? (sig.entry ? 'B' : 'b') : (sig.entry ? 'S' : 's')}
               </div>
             );
           })}
         </div>
       </div>
-      <ToastContainer limit={1} position="bottom-center" style={{ zIndex:99999 }} />
+
+      {/* 모바일에서도 확실히 보이도록 ToastContainer 설정 */}
+      <ToastContainer
+        position="bottom-center"
+        autoClose={3000}
+        hideProgressBar={true}
+        newestOnTop={true}
+        closeOnClick
+        pauseOnHover
+        theme="colored"
+        style={{
+          zIndex: 9999999,
+          pointerEvents: 'none',
+        }}
+      />
     </>
   );
 };
