@@ -3,7 +3,7 @@ import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// 1분봉 가짜 캔들 생성
+// 가짜 캔들 생성 함수
 const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
@@ -19,7 +19,7 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   });
 };
 
-// 신호 생성
+// 신호 생성 함수
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
@@ -80,6 +80,7 @@ const DualOverlayChart = () => {
 
   const alertedSignals = useRef(new Set());
 
+  // TradingView 위젯 로드
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -118,17 +119,22 @@ const DualOverlayChart = () => {
     };
   }, []);
 
+  // 차트 크기 업데이트 (윈도우 리사이즈 이벤트로 대체)
   useEffect(() => {
-    if (!containerRef.current) return;
-    const ro = new ResizeObserver(entries => {
-      for (let e of entries) {
-        setChartSize({ width: e.contentRect.width, height: e.contentRect.height || 500 });
-      }
-    });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
+    const updateSize = () => {
+      if (!containerRef.current) return;
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight || window.innerHeight;
+      console.log('📐 container size:', width, height);
+      setChartSize({ width, height });
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
   }, []);
 
+  // visibleRange 업데이트
   useEffect(() => {
     if (!widget) return;
     let chart;
@@ -142,6 +148,7 @@ const DualOverlayChart = () => {
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
   }, [widget]);
 
+  // 10초마다 새 캔들, 신호 생성, 얼러트 띄우기
   useEffect(() => {
     const interval = setInterval(() => {
       setCandles(prev => {
@@ -153,16 +160,10 @@ const DualOverlayChart = () => {
 
         newSigs.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
-          if (!alertedSignals.current.has(key) && sig.time >= now - 5000) {
-            console.log('🔔 알림 발생:', sig); // 디버깅용 로그
+          if (!alertedSignals.current.has(key) && sig.time >= now - 3000) {
             toast.info(
-              `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'} 신호\n가격:${sig.price.toFixed(5)}\n시간:${new Date(sig.time).toLocaleTimeString()}`,
-              {
-                position: 'bottom-center',
-                autoClose: 3000,
-                hideProgressBar: true,
-                theme: 'colored',
-              }
+              `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'} 신호\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
+              { position: 'bottom-center', autoClose: 3000, hideProgressBar: true, theme: 'colored' }
             );
             alertedSignals.current.add(key);
           }
@@ -175,6 +176,7 @@ const DualOverlayChart = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 시간 -> x 좌표 변환
   const timeToX = (time) => {
     if (!visibleRange || chartSize.width === 0) return -999;
     const { from, to } = visibleRange;
@@ -189,7 +191,8 @@ const DualOverlayChart = () => {
             const x = timeToX(sig.time);
             if (x < 0 || x > chartSize.width) return null;
             return (
-              <div key={i}
+              <div
+                key={i}
                 title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} - ${new Date(sig.time).toLocaleTimeString()}`}
                 style={{
                   position: 'absolute',
@@ -205,28 +208,27 @@ const DualOverlayChart = () => {
                   lineHeight: '30px',
                   border: '2px solid yellow',
                   userSelect: 'none',
-                  pointerEvents: 'none'
-                }}>
+                  pointerEvents: 'none',
+                }}
+              >
                 {sig.type === 'buy' ? (sig.entry ? 'B' : 'b') : (sig.entry ? 'S' : 's')}
               </div>
             );
           })}
         </div>
       </div>
-
-      {/* 모바일에서도 확실히 보이도록 ToastContainer 설정 */}
       <ToastContainer
         position="bottom-center"
         autoClose={3000}
         hideProgressBar={true}
         newestOnTop={true}
         closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
         pauseOnHover
         theme="colored"
-        style={{
-          zIndex: 9999999,
-          pointerEvents: 'none',
-        }}
+        style={{ position: 'fixed', zIndex: 99999, bottom: 0 }}
       />
     </>
   );
