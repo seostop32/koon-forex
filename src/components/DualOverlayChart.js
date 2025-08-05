@@ -193,17 +193,17 @@ const DualOverlayChart = () => {
         // 새로 생긴 신호 중 아직 얼러트 안 띄운 거만 띄우기 + 현재시간 지나면 스킵
         const now = Date.now();
         newSignals.forEach(sig => {
-          if (!alertedSignalsRef.current.has(sig.time)) {
-            showAlert(sig);
-            alertedSignalsRef.current.add(sig.time);
-          }          
-          // if (
-          //   !alertedSignalsRef.current.has(sig.time) && 
-          //   sig.time >= now // 현재시간 지나면 스킵
-          // ) {
+          // if (!alertedSignalsRef.current.has(sig.time)) {
           //   showAlert(sig);
           //   alertedSignalsRef.current.add(sig.time);
-          // }
+          // }          
+          if (
+            !alertedSignalsRef.current.has(sig.time) && 
+            sig.time >= now // 현재시간 지나면 스킵
+          ) {
+            showAlert(sig);
+            alertedSignalsRef.current.add(sig.time);
+          }
         });
 
         setSignals(newSignals);
@@ -240,57 +240,62 @@ const DualOverlayChart = () => {
     return ((time / 1000 - from) / (to - from)) * chartSize.width;
   };
 
-  return (
+    return (
     <>
-    <div
-      ref={containerRef}
-      id="tradingview_chart"
-      style={{ position: 'relative', width: '100%', height: '100vh' }}
-    >
-      {/* 신호 오버레이 */}
       <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: chartSize.width,
-          height: chartSize.height,
-          pointerEvents: 'none',
-          userSelect: 'none',
-          zIndex: 9999,
-        }}
+        ref={containerRef}
+        id="tradingview_chart"
+        style={{ position: 'relative', width: '100%', height: '100vh' }}
       >
-        {visibleRange && chartSize.width > 0 && signals.map((sig, i) => {
-          const x = timeToX(sig.time);
-          if (x < 0 || x > chartSize.width) return null;
-          return (
-            <div
-              key={i}
-              title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} 신호 (${new Date(sig.time).toLocaleTimeString()})`}
-              style={{
-                position: 'absolute',
-                left: x - 15,
-                top: 100,
-                width: 30,
-                height: 30,
-                borderRadius: '50%',
-                backgroundColor: sig.type === 'buy' ? (sig.entry ? 'green' : '#00aa00') : (sig.entry ? 'red' : '#aa0000'),
-                color: 'white',
-                fontWeight: 'bold',
-                textAlign: 'center',
-                lineHeight: '30px',
-                border: '2px solid yellow',
-                userSelect: 'none',
-                pointerEvents: 'none',
-              }}
-            >
-              {sig.type === 'buy' ? (sig.entry ? 'B' : 'b') : (sig.entry ? 'S' : 's')}
-            </div>
-          );
-        })}
+        {/* 신호 오버레이 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: chartSize.width,
+            height: chartSize.height,
+            pointerEvents: 'none',
+            userSelect: 'none',
+            zIndex: 9999,
+          }}
+        >
+          {visibleRange && chartSize.width > 0 && signals.map((sig, i) => {
+            const x = timeToX(sig.time);
+            if (x < 0 || x > chartSize.width) return null;
+            return (
+              <div
+                key={i}
+                title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} 신호 (${new Date(sig.time).toLocaleTimeString()})`}
+                style={{
+                  position: 'absolute',
+                  left: x - 15,
+                  top: 100,
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  backgroundColor: sig.type === 'buy' ? (sig.entry ? 'green' : '#00aa00') : (sig.entry ? 'red' : '#aa0000'),
+                  color: 'white',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  lineHeight: '30px',
+                  border: '2px solid yellow',
+                  userSelect: 'none',
+                  pointerEvents: 'none',
+                }}
+              >
+                {sig.type === 'buy' ? (sig.entry ? 'B' : 'b') : (sig.entry ? 'S' : 's')}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
-    <ToastContainer limit={1} /> {/* <-- 요거 꼭 있어야 함! */}
+
+      <ToastContainer 
+        limit={1} 
+        position="bottom-center" 
+        style={{ zIndex: 99999 }} 
+      />
     </>
   );
 };
