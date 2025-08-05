@@ -193,13 +193,17 @@ const DualOverlayChart = () => {
         // 새로 생긴 신호 중 아직 얼러트 안 띄운 거만 띄우기 + 현재시간 지나면 스킵
         const now = Date.now();
         newSignals.forEach(sig => {
-          if (
-            !alertedSignalsRef.current.has(sig.time) && 
-            sig.time >= now // 현재시간 지나면 스킵
-          ) {
+          if (!alertedSignalsRef.current.has(sig.time)) {
             showAlert(sig);
             alertedSignalsRef.current.add(sig.time);
-          }
+          }          
+          // if (
+          //   !alertedSignalsRef.current.has(sig.time) && 
+          //   sig.time >= now // 현재시간 지나면 스킵
+          // ) {
+          //   showAlert(sig);
+          //   alertedSignalsRef.current.add(sig.time);
+          // }
         });
 
         setSignals(newSignals);
