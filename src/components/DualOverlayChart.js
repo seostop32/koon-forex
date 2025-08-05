@@ -80,22 +80,6 @@ const DualOverlayChart = () => {
 
   const alertedSignals = useRef(new Set());
 
-  useEffect(() => {
-    // 테스트용 얼러트 3초마다 띄우기
-    const testInterval = setInterval(() => {
-      toast.info('테스트 얼러트 뜨나? 모바일에서', {
-        position: 'top-center',
-        autoClose: 2000,
-        pauseOnFocusLoss: false,
-        pauseOnHover: false,
-        closeOnClick: true,
-        theme: 'colored',
-        style: { zIndex: 99999, fontSize: '16px' },
-      });
-    }, 3000);
-    return () => clearInterval(testInterval);
-  }, []);  
-
   // 🧩 TradingView 위젯 로드
   useEffect(() => {
     const script = document.createElement('script');
