@@ -77,10 +77,21 @@ const DualOverlayChart = () => {
   const [candles, setCandles] = useState(generateFakeCandles());
   const [signals, setSignals] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
-
   const alertedSignals = useRef(new Set());
 
-  // TradingView 위젯 로드
+  // ✅ 모바일 알림 테스트용
+  useEffect(() => {
+    toast.info('📱 모바일 알림 테스트', {
+      position: 'bottom-center',
+      autoClose: 5000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      theme: 'colored',
+    });
+  }, []);
+
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -119,22 +130,18 @@ const DualOverlayChart = () => {
     };
   }, []);
 
-  // 차트 크기 업데이트 (윈도우 리사이즈 이벤트로 대체)
   useEffect(() => {
     const updateSize = () => {
       if (!containerRef.current) return;
       const width = containerRef.current.clientWidth;
       const height = containerRef.current.clientHeight || window.innerHeight;
-      console.log('📐 container size:', width, height);
       setChartSize({ width, height });
     };
-
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  // visibleRange 업데이트
   useEffect(() => {
     if (!widget) return;
     let chart;
@@ -148,7 +155,6 @@ const DualOverlayChart = () => {
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
   }, [widget]);
 
-  // 10초마다 새 캔들, 신호 생성, 얼러트 띄우기
   useEffect(() => {
     const interval = setInterval(() => {
       setCandles(prev => {
@@ -176,7 +182,6 @@ const DualOverlayChart = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 시간 -> x 좌표 변환
   const timeToX = (time) => {
     if (!visibleRange || chartSize.width === 0) return -999;
     const { from, to } = visibleRange;
