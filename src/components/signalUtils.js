@@ -63,6 +63,6 @@ export function generateSignals(candles) {
       signals.push({ type: 'sell', entry: false, time: t });
     }
   }
-
+ 
   return signals;
 }
