@@ -233,7 +233,13 @@ const DualOverlayChart = () => {
         draggable
         pauseOnHover
         theme="colored"
-        style={{ position: 'fixed', zIndex: 99999, bottom: 0 }}
+        style={{ 
+          position: 'fixed',
+          zIndex: 999999, // 기존보다 더 크게
+          bottom: 0,
+          width: '100vw', // 모바일 대응
+          maxWidth: '100%',
+        }}
       />
     </>
   );
