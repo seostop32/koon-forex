@@ -3,10 +3,7 @@ import React, { useState, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import DualOverlayChart from './components/DualOverlayChart';
 import TradeAlert from './components/TradeAlert';
-import {
-  generateFakeCandles,
-  generateSignals
-} from './components/signalUtils';
+import { generateFakeCandles, generateSignals } from './components/signalUtils';
 
 function App() {
   const [signals, setSignals] = useState([]);
