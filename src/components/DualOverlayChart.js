@@ -102,13 +102,7 @@ const DualOverlayChart = () => {
           autosize: false,
           onChartReady: () => {
             setWidget(w);
-            setTimeout(() => {
-              try {
-                const chart = w.chart();
-                const rng = chart.timeScale().getVisibleRange();
-                if (rng) setVisibleRange(rng);
-              } catch {}
-            }, 1000);
+            // 차트 준비되면 차트 객체 가져오기 시도는 아래 useEffect에서 처리
           },
         });
       }
@@ -135,18 +129,28 @@ const DualOverlayChart = () => {
   // 🕒 visibleRange 추적
   useEffect(() => {
     if (!widget) return;
+
     let chart;
     try {
-      chart = widget.chart();
-    } catch {
+      if (typeof widget.chart === 'function') {
+        chart = widget.chart();
+      } else {
+        console.warn('widget.chart is not a function');
+        return;
+      }
+    } catch (e) {
+      console.error('Error accessing chart:', e);
       return;
     }
+
     const onRangeChange = () => {
       const rng = chart.timeScale().getVisibleRange();
       if (rng && rng.from !== rng.to) setVisibleRange(rng);
     };
+
     onRangeChange();
     chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
+
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
   }, [widget]);
 
