@@ -1,30 +1,13 @@
 import React from 'react';
-import DualOverlayChart from './components/DualOverlayChart'; // 경로는 네 파일 위치에 맞게 수정해줘
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import MobileToastTest from './components/MobileToastTest';
+import DualOverlayChart from './components/DualOverlayChart'; // 예전 차트
 
 function App() {
-  React.useEffect(() => {
-    toast.info('앱 시작 테스트 알림!', { position: 'bottom-center' });
-  }, []);
-
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  console.log('isMobile:', isMobile, navigator.userAgent);
   return (
     <>
-      <DualOverlayChart />
-
-      <ToastContainer
-        position="bottom-center"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="colored"
-        style={{ zIndex: 99999 }}
-      />
+      {isMobile ? <MobileToastTest /> : <DualOverlayChart />}
     </>
   );
 }
