@@ -91,21 +91,17 @@ const DualOverlayChart = () => {
         const w = new window.TradingView.widget({
           symbol: 'FX:EURUSD',
           interval: '1',
-          timezone: 'Asia/Seoul',
-          theme: 'light',
-          style: '1',
-          locale: 'en',
-          hide_top_toolbar: true,
           container_id: 'tradingview_chart',
           width: containerRef.current.clientWidth,
           height: window.innerHeight,
+          theme: 'light',
+          locale: 'en',
           autosize: false,
+          hide_top_toolbar: true,
+          timezone: 'Asia/Seoul',
+          style: '1',
           onChartReady: () => {
-            if (w && typeof w.chart === 'function') {
-              setWidget(w);
-            } else {
-              console.error('⚠️ chart() 함수 없음 - widget:', w);
-            }
+            setWidget(w);
           }
         });
       }
@@ -135,14 +131,15 @@ const DualOverlayChart = () => {
 
     let chart;
     try {
+      // ✅ 여기서 chart() 없는 경우 안전 탈출
       if (typeof widget.chart === 'function') {
         chart = widget.chart();
       } else {
-        console.warn('widget.chart is not a function', widget);
+        console.warn('📛 widget.chart is not a function. widget:', widget);
         return;
       }
     } catch (e) {
-      console.error('Error accessing chart:', e);
+      console.error('❌ Error accessing chart():', e);
       return;
     }
 
@@ -153,9 +150,8 @@ const DualOverlayChart = () => {
 
     onRangeChange();
     chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
-
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
-  }, [widget]);
+  }, [widget]);  
   
 
   // 🔔 신호 감지 및 알림
