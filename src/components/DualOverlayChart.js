@@ -101,9 +101,12 @@ const DualOverlayChart = () => {
           height: window.innerHeight,
           autosize: false,
           onChartReady: () => {
-            setWidget(w);
-            // 차트 준비되면 차트 객체 가져오기 시도는 아래 useEffect에서 처리
-          },
+            if (w && typeof w.chart === 'function') {
+              setWidget(w);
+            } else {
+              console.error('⚠️ chart() 함수 없음 - widget:', w);
+            }
+          }
         });
       }
     };
@@ -233,17 +236,21 @@ const DualOverlayChart = () => {
         </div>
       </div>
       <ToastContainer
-        position="bottom-center"
+        position="top-center"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop
         closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
         pauseOnHover
+        draggable
         theme="colored"
-        style={{ zIndex: 99999 }}
+        style={{
+          position: 'fixed',
+          top: 60,
+          left: 0,
+          right: 0,
+          zIndex: 999999,
+        }}
       />
     </>
   );
