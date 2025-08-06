@@ -167,6 +167,7 @@ const DualOverlayChart = () => {
         newSignals.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
           if (!alertedSignals.current.has(key) && sig.time >= now - 5000) {
+            console.log('모바일 토스트 호출 시도:', sig);  // <-- 여기 추가
             toast.info(
               `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
               {
@@ -188,7 +189,7 @@ const DualOverlayChart = () => {
       });
     }, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, []);  
 
   // 🔧 좌표 계산
   const timeToX = (time) => {
