@@ -1,3 +1,4 @@
+// DualOverlayChart.js
 import React, { useEffect, useRef, useState } from 'react';
 import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
@@ -103,14 +104,14 @@ const DualOverlayChart = () => {
           style: '1',
         });
 
-        // 2. onChartReady 체크해서 호출
-        if (w.onChartReady && typeof w.onChartReady === 'function') {
-          w.onChartReady(() => {
-            setWidget(w); // ✅ chart가 준비된 이후에 set
+        w.onChartReady(() => {
+          setWidget(w); // ✅ chart가 준비된 이후에 set
+          toast.info("차트가 준비되었습니다!", {
+            position: 'bottom-center',
+            autoClose: 3000,
+            theme: 'colored',
           });
-        } else {
-          console.warn('w.onChartReady is not a function. Widget might not be ready yet.');
-        }
+        });
       }
     };
 
@@ -118,7 +119,7 @@ const DualOverlayChart = () => {
       if (containerRef.current) containerRef.current.innerHTML = '';
       document.head.removeChild(script);
     };
-  }, []);   
+  }, []);
 
   // 🔁 리사이즈 감지
   useEffect(() => {
@@ -159,8 +160,7 @@ const DualOverlayChart = () => {
     onRangeChange();
     chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
-  }, [widget]);  
-  
+  }, [widget]);
 
   // 🔔 신호 감지 및 알림
   useEffect(() => {
@@ -174,13 +174,8 @@ const DualOverlayChart = () => {
 
         newSignals.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
-          const now = Date.now();
-
-          // 🔍 여기 로그 추가
-          console.log('[신호 확인]', sig, '현재 시각:', now, '신호 시각:', sig.time);
 
           if (!alertedSignals.current.has(key)) {
-            console.log('[📢 강제 토스트]', sig);
             toast.info(
               `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
               {
@@ -198,7 +193,7 @@ const DualOverlayChart = () => {
       });
     }, 10000);
     return () => clearInterval(interval);
-  }, []);  
+  }, []);
 
   // 🔧 좌표 계산
   const timeToX = (time) => {
@@ -220,46 +215,19 @@ const DualOverlayChart = () => {
                 title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} - ${new Date(sig.time).toLocaleTimeString()}`}
                 style={{
                   position: 'absolute',
-                  left: x - 15,
-                  top: 100,
-                  width: 30,
-                  height: 30,
-                  borderRadius: '50%',
-                  backgroundColor: sig.type === 'buy' ? (sig.entry ? 'green' : '#00aa00') : (sig.entry ? 'red' : '#aa0000'),
-                  color: 'white',
+                  top: 10 + i * 20,
+                  left: x,
+                  color: sig.type === 'buy' ? 'green' : 'red',
+                  fontSize: 14,
                   fontWeight: 'bold',
-                  textAlign: 'center',
-                  lineHeight: '30px',
-                  border: '2px solid yellow',
-                  userSelect: 'none',
-                  pointerEvents: 'none',
                 }}
               >
-                {sig.type === 'buy' ? (sig.entry ? 'B' : 'b') : (sig.entry ? 'S' : 's')}
+                {sig.type === 'buy' ? '🔼' : '🔽'}
               </div>
             );
           })}
         </div>
       </div>
-      <ToastContainer
-        position="bottom-center"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="colored"
-        style={{
-          zIndex: 999999,
-          position: 'fixed',
-          bottom: 20,
-          left: 0,
-          right: 0,
-        }}
-      />
     </>
   );
 };
