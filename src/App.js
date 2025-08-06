@@ -1,10 +1,10 @@
 import React from 'react';
 import MobileToastTest from './components/MobileToastTest';
-import DualOverlayChart from './components/DualOverlayChart'; // 예전 차트
+import DualOverlayChart from './components/DualOverlayChart';
 
 function App() {
-  const isMobile = true; // ← 이거만 남겨!
-  console.log('isMobile:', isMobile, navigator.userAgent);
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  console.log('📱 isMobile:', isMobile, navigator.userAgent);
 
   return (
     <>

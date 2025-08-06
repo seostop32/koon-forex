@@ -236,20 +236,23 @@ const DualOverlayChart = () => {
         </div>
       </div>
       <ToastContainer
-        position="top-center"
+        position="bottom-center"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop
         closeOnClick
-        pauseOnHover
+        rtl={false}
+        pauseOnFocusLoss
         draggable
+        pauseOnHover
         theme="colored"
         style={{
+          zIndex: 999999,
           position: 'fixed',
-          top: 60,
+          bottom: 20,
           left: 0,
           right: 0,
-          zIndex: 999999,
+          pointerEvents: 'none',
         }}
       />
     </>
