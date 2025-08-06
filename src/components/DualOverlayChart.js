@@ -138,7 +138,7 @@ const DualOverlayChart = () => {
       if (typeof widget.chart === 'function') {
         chart = widget.chart();
       } else {
-        console.warn('widget.chart is not a function');
+        console.warn('widget.chart is not a function', widget);
         return;
       }
     } catch (e) {
@@ -156,6 +156,7 @@ const DualOverlayChart = () => {
 
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
   }, [widget]);
+  
 
   // 🔔 신호 감지 및 알림
   useEffect(() => {
