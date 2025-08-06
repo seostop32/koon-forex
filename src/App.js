@@ -1,4 +1,7 @@
 import React from 'react';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 import MobileToastTest from './components/MobileToastTest';
 import DualOverlayChart from './components/DualOverlayChart';
 
@@ -9,6 +12,7 @@ function App() {
   return (
     <>
       {isMobile ? <MobileToastTest /> : <DualOverlayChart />}
+      <ToastContainer />
     </>
   );
 }
