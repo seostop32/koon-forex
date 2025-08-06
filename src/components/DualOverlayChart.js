@@ -86,6 +86,7 @@ const DualOverlayChart = () => {
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
     document.head.appendChild(script);
+
     script.onload = () => {
       if (window.TradingView && containerRef.current) {
         const w = new window.TradingView.widget({
@@ -100,17 +101,19 @@ const DualOverlayChart = () => {
           hide_top_toolbar: true,
           timezone: 'Asia/Seoul',
           style: '1',
-          onChartReady: () => {
-            setWidget(w);
-          }
+        });
+
+        w.onChartReady(() => {
+          setWidget(w); // ✅ chart가 준비된 이후에 set
         });
       }
     };
+
     return () => {
       if (containerRef.current) containerRef.current.innerHTML = '';
       document.head.removeChild(script);
     };
-  }, []);
+  }, []);  
 
   // 🔁 리사이즈 감지
   useEffect(() => {
