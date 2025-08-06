@@ -253,7 +253,6 @@ const DualOverlayChart = () => {
           bottom: 20,
           left: 0,
           right: 0,
-          pointerEvents: 'none',
         }}
       />
     </>
