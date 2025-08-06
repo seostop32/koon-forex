@@ -103,9 +103,14 @@ const DualOverlayChart = () => {
           style: '1',
         });
 
-        w.onChartReady(() => {
-          setWidget(w); // ✅ chart가 준비된 이후에 set
-        });
+        // 2. onChartReady 체크해서 호출
+        if (w.onChartReady && typeof w.onChartReady === 'function') {
+          w.onChartReady(() => {
+            setWidget(w); // ✅ chart가 준비된 이후에 set
+          });
+        } else {
+          console.warn('w.onChartReady is not a function. Widget might not be ready yet.');
+        }
       }
     };
 
@@ -113,7 +118,7 @@ const DualOverlayChart = () => {
       if (containerRef.current) containerRef.current.innerHTML = '';
       document.head.removeChild(script);
     };
-  }, []);  
+  }, []);   
 
   // 🔁 리사이즈 감지
   useEffect(() => {
