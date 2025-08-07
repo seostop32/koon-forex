@@ -142,9 +142,10 @@ const DualOverlayChart = () => {
 
         newSignals.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
+          const now = Date.now();
 
-          // 현재 시각과 신호 시각 차이 1분(60000ms) 이내인 경우만 알림
-          if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 60000) {
+          // 10초 이내 신호만 알림 & 중복 방지
+          if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 10000) {
             toast.info(
               `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
               {
