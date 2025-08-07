@@ -153,7 +153,7 @@ const DualOverlayChart = () => {
           const now = Date.now();
 
           // 10초 이내 신호만 알림 & 중복 방지
-        if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 10000) {
+        if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 20000) {
           playSound(); // 사운드 재생
           toast.info(
             `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
