@@ -141,6 +141,7 @@ const DualOverlayChart = () => {
         newSignals.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
           if (!alertedSignals.current.has(key)) {
+            console.log("📢 Showing toast:", sig);
             toast.info(
               `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
               {
