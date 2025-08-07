@@ -20,7 +20,7 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   });
 };
 
-// 🚨 신호 생성 함수
+// 🚨 신호 생성 함수 (USD 기준: EUR/USD 상승 → 매도 / 하락 → 매수)
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
@@ -43,15 +43,18 @@ const generateSignals = (candles) => {
     const vol = volumes[i];
     if (!macd || rsi == null || !avgVol) continue;
 
+    // ✅ USD 기준 신호 (기존 신호 반대 처리)
     if (currentState === 'flat') {
       if (macd.MACD > macd.signal && rsi < 60 && vol > avgVol * 0.8) {
-        currentState = 'long';
-        entryPrice = price;
-        signals.push({ type: 'buy', entry: true, time: sigTime, price });
-      } else if (macd.MACD < macd.signal && rsi > 40 && vol < avgVol * 1.2) {
+        // EUR/USD 상승 → USD 약세 → 매도 신호 (USD 기준)
         currentState = 'short';
         entryPrice = price;
         signals.push({ type: 'sell', entry: true, time: sigTime, price });
+      } else if (macd.MACD < macd.signal && rsi > 40 && vol < avgVol * 1.2) {
+        // EUR/USD 하락 → USD 강세 → 매수 신호 (USD 기준)
+        currentState = 'long';
+        entryPrice = price;
+        signals.push({ type: 'buy', entry: true, time: sigTime, price });
       }
     } else if (currentState === 'long') {
       if (price >= entryPrice + minProfit) {
@@ -129,6 +132,11 @@ const DualOverlayChart = () => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
+  const playSound = () => {
+    const audio = new Audio('/notify.mp3'); // 사운드 파일 경로
+    audio.play();
+  };
+
   // 🔔 신호 감지 및 알림
   useEffect(() => {
     const interval = setInterval(() => {
@@ -145,16 +153,17 @@ const DualOverlayChart = () => {
           const now = Date.now();
 
           // 10초 이내 신호만 알림 & 중복 방지
-          if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 10000) {
-            toast.info(
-              `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
-              {
-                position: 'bottom-center',
-                autoClose: 4000,
-                theme: 'colored',
-              }
-            );
-            alertedSignals.current.add(key);
+        if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 10000) {
+          playSound(); // 사운드 재생
+          toast.info(
+            `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
+            {
+              position: 'bottom-center',
+              autoClose: 4000,
+              theme: 'colored',
+            }
+          );
+          alertedSignals.current.add(key);
           }
         });
 
