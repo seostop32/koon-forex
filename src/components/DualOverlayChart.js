@@ -4,6 +4,7 @@ import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// 📈 가짜 캔들 생성 함수
 const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
@@ -19,6 +20,7 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   });
 };
 
+// 🚨 신호 생성 함수
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
@@ -71,14 +73,14 @@ const generateSignals = (candles) => {
 
 const DualOverlayChart = () => {
   const containerRef = useRef(null);
-  const [widget, setWidget] = useState(null);
+  const [widgetReady, setWidgetReady] = useState(false);
   const [chartSize, setChartSize] = useState({ width: 0, height: window.innerHeight });
   const [candles, setCandles] = useState(generateFakeCandles());
   const [signals, setSignals] = useState([]);
   const [visibleRange, setVisibleRange] = useState(null);
-
   const alertedSignals = useRef(new Set());
 
+  // TradingView Widget Load
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -87,7 +89,7 @@ const DualOverlayChart = () => {
 
     script.onload = () => {
       if (window.TradingView && containerRef.current) {
-        const w = new window.TradingView.widget({
+        new window.TradingView.widget({
           symbol: 'FX:EURUSD',
           interval: '1',
           container_id: 'tradingview_chart',
@@ -101,19 +103,16 @@ const DualOverlayChart = () => {
           style: '1',
         });
 
-        w.onChartReady(() => {
-          setWidget(w);
-          toast.success("✅ 차트가 준비되었습니다!", {
-            position: 'bottom-center',
-            autoClose: 3000,
-            theme: 'colored',
-          });
+        setWidgetReady(true);
+        toast.info("차트가 준비되었습니다!", {
+          position: 'bottom-center',
+          autoClose: 3000,
+          theme: 'colored',
         });
       }
     };
 
     return () => {
-      if (containerRef.current) containerRef.current.innerHTML = '';
       document.head.removeChild(script);
     };
   }, []);
@@ -130,27 +129,7 @@ const DualOverlayChart = () => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  useEffect(() => {
-    if (!widget) return;
-
-    const chart = widget.activeChart?.();
-    if (!chart || !chart.timeScale) {
-      console.warn("📛 차트 혹은 timeScale 접근 불가");
-      return;
-    }
-
-    const onRangeChange = () => {
-      const rng = chart.timeScale().getVisibleRange?.();
-      if (rng && rng.from !== rng.to) {
-        setVisibleRange(rng);
-      }
-    };
-
-    onRangeChange();
-    chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
-    return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
-  }, [widget]);
-
+  // 🔔 신호 감지 및 알림
   useEffect(() => {
     const interval = setInterval(() => {
       setCandles(prev => {
