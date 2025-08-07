@@ -4,6 +4,7 @@ import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// 📈 가짜 캔들 생성 함수
 const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
@@ -19,6 +20,7 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   });
 };
 
+// 🚨 신호 생성 함수
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
@@ -79,6 +81,7 @@ const DualOverlayChart = () => {
 
   const alertedSignals = useRef(new Set());
 
+  // 🧩 TradingView 위젯 로드
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -102,8 +105,8 @@ const DualOverlayChart = () => {
         });
 
         w.onChartReady(() => {
-          setWidget(w);
-          toast.success("✅ 차트가 준비되었습니다!", {
+          setWidget(w); // ✅ chart가 준비된 이후에 set
+          toast.info("차트가 준비되었습니다!", {
             position: 'bottom-center',
             autoClose: 3000,
             theme: 'colored',
@@ -118,6 +121,7 @@ const DualOverlayChart = () => {
     };
   }, []);
 
+  // 🔁 리사이즈 감지
   useEffect(() => {
     const updateSize = () => {
       if (!containerRef.current) return;
@@ -130,20 +134,27 @@ const DualOverlayChart = () => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
+  // 🕒 visibleRange 추적
   useEffect(() => {
     if (!widget) return;
 
-    const chart = widget.activeChart?.();
-    if (!chart || !chart.timeScale) {
-      console.warn("📛 차트 혹은 timeScale 접근 불가");
+    let chart;
+    try {
+      // ✅ 여기서 chart() 없는 경우 안전 탈출
+      if (typeof widget.chart === 'function') {
+        chart = widget.chart();
+      } else {
+        console.warn('📛 widget.chart is not a function. widget:', widget);
+        return;
+      }
+    } catch (e) {
+      console.error('❌ Error accessing chart():', e);
       return;
     }
 
     const onRangeChange = () => {
-      const rng = chart.timeScale().getVisibleRange?.();
-      if (rng && rng.from !== rng.to) {
-        setVisibleRange(rng);
-      }
+      const rng = chart.timeScale().getVisibleRange();
+      if (rng && rng.from !== rng.to) setVisibleRange(rng);
     };
 
     onRangeChange();
@@ -151,6 +162,7 @@ const DualOverlayChart = () => {
     return () => chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
   }, [widget]);
 
+  // 🔔 신호 감지 및 알림
   useEffect(() => {
     const interval = setInterval(() => {
       setCandles(prev => {
@@ -158,9 +170,11 @@ const DualOverlayChart = () => {
         const newCandle = generateFakeCandles(1, last)[0];
         const updated = [...prev.slice(1), newCandle];
         const newSignals = generateSignals(updated);
+        const now = Date.now();
 
         newSignals.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
+
           if (!alertedSignals.current.has(key)) {
             toast.info(
               `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
@@ -181,6 +195,7 @@ const DualOverlayChart = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 🔧 좌표 계산
   const timeToX = (time) => {
     if (!visibleRange || chartSize.width === 0) return -999;
     const { from, to } = visibleRange;
@@ -189,7 +204,6 @@ const DualOverlayChart = () => {
 
   return (
     <>
-      <ToastContainer />
       <div ref={containerRef} id="tradingview_chart" style={{ position: 'relative', width: '100%', height: '100vh' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: chartSize.width, height: chartSize.height, pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}>
           {visibleRange && chartSize.width > 0 && signals.map((sig, i) => {
