@@ -147,6 +147,7 @@ const DualOverlayChart = () => {
           hide_top_toolbar: true,
           timezone: 'Asia/Seoul',
           style: '1',
+          studies: ['Ichimoku Cloud'],
         });
 
         setWidgetReady(true);
