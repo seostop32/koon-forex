@@ -135,7 +135,7 @@ const DualOverlayChart = () => {
 
     script.onload = () => {
       if (window.TradingView && containerRef.current) {
-        new window.TradingView.widget({
+        const widget = new window.TradingView.widget({
           symbol: 'FX:EURUSD',
           interval: '1',
           container_id: 'tradingview_chart',
@@ -147,7 +147,11 @@ const DualOverlayChart = () => {
           hide_top_toolbar: true,
           timezone: 'Asia/Seoul',
           style: '1',
-          studies: ['Ichimoku Cloud'],
+        });
+
+        widget.onChartReady(() => {
+          const chart = widget.chart();
+          chart.createStudy("Ichimoku Cloud", false, false, null, {});
         });
 
         setWidgetReady(true);
@@ -162,7 +166,7 @@ const DualOverlayChart = () => {
     return () => {
       document.head.removeChild(script);
     };
-  }, []);
+  }, []);  
 
   // 🔄 데이터 업데이트 & 알림
   useEffect(() => {
