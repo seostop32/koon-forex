@@ -1,6 +1,6 @@
 // DualOverlayChart.js
 import React, { useEffect, useRef, useState } from 'react';
-import { RSI, MACD, SMA } from 'technicalindicators';
+import { RSI, MACD, SMA, IchimokuCloud } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -43,15 +43,13 @@ const generateSignals = (candles) => {
     const vol = volumes[i];
     if (!macd || rsi == null || !avgVol) continue;
 
-    // ✅ USD 기준 신호 (기존 신호 반대 처리)
+    // ✅ USD 기준 신호 (EUR/USD 반대로 해석)
     if (currentState === 'flat') {
       if (macd.MACD > macd.signal && rsi < 60 && vol > avgVol * 0.8) {
-        // EUR/USD 상승 → USD 약세 → 매도 신호 (USD 기준)
         currentState = 'short';
         entryPrice = price;
         signals.push({ type: 'sell', entry: true, time: sigTime, price });
       } else if (macd.MACD < macd.signal && rsi > 40 && vol < avgVol * 1.2) {
-        // EUR/USD 하락 → USD 강세 → 매수 신호 (USD 기준)
         currentState = 'long';
         entryPrice = price;
         signals.push({ type: 'buy', entry: true, time: sigTime, price });
@@ -78,12 +76,57 @@ const DualOverlayChart = () => {
   const containerRef = useRef(null);
   const [widgetReady, setWidgetReady] = useState(false);
   const [chartSize, setChartSize] = useState({ width: 0, height: window.innerHeight });
-  const [candles, setCandles] = useState(generateFakeCandles());
+  const [candles, setCandles] = useState(generateFakeCandles(80));
   const [signals, setSignals] = useState([]);
-  const [visibleRange, setVisibleRange] = useState(null);
+  const [visibleRange, setVisibleRange] = useState({ from: Math.floor(Date.now() / 1000) - 60 * 50, to: Math.floor(Date.now() / 1000) });
+  const [ichimokuData, setIchimokuData] = useState([]);
   const alertedSignals = useRef(new Set());
 
-  // TradingView Widget Load
+  const playSound = () => {
+    const audio = new Audio('/notify.mp3');
+    audio.play();
+  };
+
+  useEffect(() => {
+    // 첫 사용자 입력 시 오디오 허용
+    const enableAudio = () => {
+      const audio = new Audio('/notify.mp3');
+      audio.play().catch((e) => {
+        console.warn('초기 사운드 재생 실패:', e.message);
+      });
+
+      window.removeEventListener('click', enableAudio); // 한 번만 실행
+    };
+
+    window.addEventListener('click', enableAudio);
+  }, []);  
+
+  // 📉 일목균형표 계산
+  const calculateIchimoku = (candles) => {
+    return IchimokuCloud.calculate({
+      high: candles.map(c => c.high),
+      low: candles.map(c => c.low),
+      conversionPeriod: 9,
+      basePeriod: 26,
+      spanPeriod: 52,
+      displacement: 26,
+    });
+  };
+
+  // 📦 차트 크기 조정
+  useEffect(() => {
+    const updateSize = () => {
+      if (!containerRef.current) return;
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight || window.innerHeight;
+      setChartSize({ width, height });
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+  // 📈 TV 차트 로드
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -120,50 +163,32 @@ const DualOverlayChart = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const updateSize = () => {
-      if (!containerRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight || window.innerHeight;
-      setChartSize({ width, height });
-    };
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, []);
-
-  const playSound = () => {
-    const audio = new Audio('/notify.mp3'); // 사운드 파일 경로
-    audio.play();
-  };
-
-  // 🔔 신호 감지 및 알림
+  // 🔄 데이터 업데이트 & 알림
   useEffect(() => {
     const interval = setInterval(() => {
       setCandles(prev => {
         const last = prev[prev.length - 1].close;
         const newCandle = generateFakeCandles(1, last)[0];
         const updated = [...prev.slice(1), newCandle];
+
         const newSignals = generateSignals(updated);
+        const ichimoku = calculateIchimoku(updated);
+        setIchimokuData(ichimoku);
 
         const now = Date.now();
-
         newSignals.forEach(sig => {
           const key = `${sig.type}-${sig.entry}-${sig.time}`;
-          const now = Date.now();
-
-          // 10초 이내 신호만 알림 & 중복 방지
-        if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 20000) {
-          playSound(); // 사운드 재생
-          toast.info(
-            `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
-            {
-              position: 'bottom-center',
-              autoClose: 4000,
-              theme: 'colored',
-            }
-          );
-          alertedSignals.current.add(key);
+          if (!alertedSignals.current.has(key) && Math.abs(now - sig.time) < 20000) {
+            playSound();
+            toast.info(
+              `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
+              {
+                position: 'bottom-center',
+                autoClose: 4000,
+                theme: 'colored',
+              }
+            );
+            alertedSignals.current.add(key);
           }
         });
 
@@ -175,9 +200,11 @@ const DualOverlayChart = () => {
   }, []);
 
   const timeToX = (time) => {
-    if (!visibleRange || chartSize.width === 0) return -999;
-    const { from, to } = visibleRange;
-    return ((time / 1000 - from) / (to - from)) * chartSize.width;
+    const candleTimes = candles.map(c => c.time);
+    const minTime = Math.min(...candleTimes);
+    const maxTime = Math.max(...candleTimes);
+
+    return ((time / 1000 - minTime) / (maxTime - minTime)) * chartSize.width;
   };
 
   return (
@@ -185,6 +212,7 @@ const DualOverlayChart = () => {
       <ToastContainer />
       <div ref={containerRef} id="tradingview_chart" style={{ position: 'relative', width: '100%', height: '100vh' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: chartSize.width, height: chartSize.height, pointerEvents: 'none', userSelect: 'none', zIndex: 9999 }}>
+          {/* 🔔 신호 아이콘 표시 */}
           {visibleRange && chartSize.width > 0 && signals.map((sig, i) => {
             const x = timeToX(sig.time);
             if (x < 0 || x > chartSize.width) return null;
@@ -203,6 +231,28 @@ const DualOverlayChart = () => {
               >
                 {sig.type === 'buy' ? '🔼' : '🔽'}
               </div>
+            );
+          })}
+
+          {/* ☁️ 일목 구름 표시 */}
+          {ichimokuData.map((item, idx) => {
+            const candleIdx = idx + 26;
+            if (!candles[candleIdx]) return null;
+
+            const x = timeToX(candles[candleIdx].time * 1000);
+            if (x < 0 || x > chartSize.width) return null;
+
+            return (
+              <div key={idx} style={{
+                position: 'absolute',
+                left: x,
+                top: 0,
+                height: chartSize.height,
+                width: 1,
+                backgroundColor: item.spanA > item.spanB
+                  ? 'rgba(0,255,0,0.2)'
+                  : 'rgba(255,0,0,0.2)',
+              }} />
             );
           })}
         </div>
