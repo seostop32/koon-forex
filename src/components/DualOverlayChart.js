@@ -24,9 +24,13 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
 const generateSignals = (candles) => {
   const closes = candles.map(c => c.close);
   const volumes = candles.map(c => c.volume);
+
   const rsiArr = RSI.calculate({ values: closes, period: 14 });
   const macdArr = MACD.calculate({ values: closes, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
   const volMA = SMA.calculate({ values: volumes, period: 10 });
+
+  const shortMA = SMA.calculate({ values: closes, period: 50 });
+  const longMA = SMA.calculate({ values: closes, period: 200 });
 
   const signals = [];
   let currentState = 'flat';
@@ -34,21 +38,32 @@ const generateSignals = (candles) => {
   const tickSize = 0.0001;
   const minProfit = tickSize * 5;
 
-  for (let i = 26; i < candles.length; i++) {
+  for (let i = 200; i < candles.length; i++) {
     const sigTime = candles[i].time * 1000;
     const price = candles[i].close;
-    const rsi = rsiArr[i - 12];
-    const macd = macdArr[i - 26];
-    const avgVol = volMA[i - 10];
+
+    const rsi = rsiArr[i - 200 + (200 - 14)];
+    const macd = macdArr[i - 200 + (200 - 26)];
+    const avgVol = volMA[i - 200 + (200 - 10)];
     const vol = volumes[i];
-    if (!macd || rsi == null || !avgVol) continue;
+
+    const smaShortPrev = shortMA[i - 200 - 1];
+    const smaShort = shortMA[i - 200];
+    const smaLongPrev = longMA[i - 200 - 1];
+    const smaLong = longMA[i - 200];
+
+    if (!macd || rsi == null || !avgVol || !smaShortPrev || !smaLongPrev) continue;
+
+    // 골든/데드 크로스 진입 조건
+    const goldenCross = smaShortPrev < smaLongPrev && smaShort > smaLong;
+    const deadCross = smaShortPrev > smaLongPrev && smaShort < smaLong;
 
     if (currentState === 'flat') {
-      if (macd.MACD > macd.signal && rsi < 60 && vol > avgVol * 0.8) {
+      if ((macd.MACD > macd.signal && rsi < 60 && vol > avgVol * 0.8) || goldenCross) {
         currentState = 'short';
         entryPrice = price;
         signals.push({ type: 'sell', entry: true, time: sigTime, price });
-      } else if (macd.MACD < macd.signal && rsi > 40 && vol < avgVol * 1.2) {
+      } else if ((macd.MACD < macd.signal && rsi > 40 && vol < avgVol * 1.2) || deadCross) {
         currentState = 'long';
         entryPrice = price;
         signals.push({ type: 'buy', entry: true, time: sigTime, price });
@@ -142,6 +157,8 @@ const DualOverlayChart = () => {
         widget.onChartReady(() => {
           const chart = widget.chart();
           chart.createStudy("Ichimoku Cloud", false, false, null, {});
+          chart.createStudy("Moving Average", false, false, [50], { "color": "#00FF00" }); // Short MA
+          chart.createStudy("Moving Average", false, false, [200], { "color": "#FF0000" }); // Long MA
         });
 
         toast.info("차트가 준비되었습니다!", {
