@@ -237,14 +237,22 @@ const DualOverlayChart = () => {
             const isRecent = sig.time >= lastTime - 15000 && sig.time <= lastTime;
             if (!alertedSignals.current.has(key) && isRecent) {
               playSound();
-              const timeStr = new Date(sig.time).toLocaleTimeString();
-              const priceStr = sig.price.toFixed(5);
-              const msgType = sig.type === 'buy' ? '매수' : sig.type === 'sell' ? '매도' : sig.type === 'golden' ? '골든크로스' : '데드크로스';
-              toast.info(`${msgType} 신호 발생! 가격: ${priceStr}, 시간: ${timeStr}`, {
-                position: 'bottom-center',
-                theme: 'colored',
-                autoClose: 4000,
-              });
+              if (sig.type === 'buy' || sig.type === 'golden') {
+                toast.error(
+                  `${sig.type === 'buy' ? '매수' : '골든크로스'} 신호 발생! 가격: ${sig.price.toFixed(5)} 시간: ${new Date(sig.time).toLocaleTimeString()}`,
+                  { position: 'bottom-center', theme: 'colored' }
+                );
+              } else if (sig.type === 'sell' || sig.type === 'dead') {
+                toast.info(
+                  `${sig.type === 'sell' ? '매도' : '데드크로스'} 신호 발생! 가격: ${sig.price.toFixed(5)} 시간: ${new Date(sig.time).toLocaleTimeString()}`,
+                  { position: 'bottom-center', theme: 'colored' }
+                );
+              } else if ((sig.type === 'buy' && sig.entry === false) || (sig.type === 'sell' && sig.entry === false)) {
+                toast.success(
+                  `${sig.type === 'buy' ? '매수 청산' : '매도 청산'} 신호 발생! 가격: ${sig.price.toFixed(5)} 시간: ${new Date(sig.time).toLocaleTimeString()}`,
+                  { position: 'bottom-center', theme: 'colored' }
+                );
+              }
               alertedSignals.current.add(key);
             }
           });
