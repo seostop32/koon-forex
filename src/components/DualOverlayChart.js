@@ -260,7 +260,9 @@ const DualOverlayChart = () => {
             if (!alertedSignals.current.has(key) && isRecent) {
               playSound();
               toast.info(
-                `${sig.type === 'buy' ? '매수' : sig.type === 'sell' ? '매도' : sig.type === 'golden' ? '골든크로스' : '데드크로스'} 신호 발생!`,
+                `${sig.type === 'buy' ? '매수' : sig.type === 'sell' ? '매도' : sig.type === 'golden' ? '골든크로스' : '데드크로스'} 신호 발생!\n` +
+                `가격: ${sig.price.toFixed(4)}\n` +
+                `시간: ${new Date(sig.time).toLocaleTimeString()}`,
                 { position: 'bottom-center', theme: 'colored' }
               );
               alertedSignals.current.add(key);
