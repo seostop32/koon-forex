@@ -1,14 +1,16 @@
 // DualOverlayChart.js
 import React, { useEffect, useRef, useState } from 'react';
-import { RSI, MACD, SMA, IchimokuCloud } from 'technicalindicators';
+import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { sendSignal } from './SignalSender';
+import TestSignalButton from './TestSignalButton';
 
-// 📈 가짜 캔들 생성 함수
-const generateFakeCandles = (count = 50, startPrice = 1.1) => {
+// 가짜 캔들 생성 함수
+const generateFakeCandles = (count = 80, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
-    const cp = startPrice + Math.random() * 0.01;
+    const cp = startPrice + (Math.random() - 0.5) * 0.01;
     return {
       time: now - (count - 1 - i) * 60,
       open: cp,
@@ -20,83 +22,136 @@ const generateFakeCandles = (count = 50, startPrice = 1.1) => {
   });
 };
 
-// 🚨 신호 생성 함수 (USD 기준: EUR/USD 상승 → 매도 / 하락 → 매수)
-const generateSignals = (candles) => {
-  const closes = candles.map(c => c.close);
-  const volumes = candles.map(c => c.volume);
+// 달러인덱스(DXY) 가짜 데이터 생성
+const generateFakeDXY = (count = 80, startPrice = 105) => {
+  const now = Math.floor(Date.now() / 1000);
+  return Array.from({ length: count }, (_, i) => {
+    const cp = startPrice + (Math.random() - 0.5) * 0.03;
+    return {
+      time: now - (count - 1 - i) * 60,
+      open: cp,
+      high: cp + Math.random() * 0.01,
+      low: cp - Math.random() * 0.01,
+      close: cp,
+      volume: 2000 + Math.floor(Math.random() * 1000),
+    };
+  });
+};
 
-  const rsiArr = RSI.calculate({ values: closes, period: 14 });
-  const macdArr = MACD.calculate({ values: closes, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
-  const volMA = SMA.calculate({ values: volumes, period: 10 });
+// 신호 생성 함수
+const generateSignals = (eurCandles, dxyCandles) => {
+  const eurCloses = eurCandles.map(c => c.close);
+  const dxyCloses = dxyCandles.map(c => c.close);
+  const eurVolumes = eurCandles.map(c => c.volume);
+  const dxyVolumes = dxyCandles.map(c => c.volume);
 
-  const shortMA = SMA.calculate({ values: closes, period: 50 });
-  const longMA = SMA.calculate({ values: closes, period: 200 });
+  const eurRSI = RSI.calculate({ values: eurCloses, period: 14 });
+  const eurMACD = MACD.calculate({ values: eurCloses, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
+  const eurVolMA = SMA.calculate({ values: eurVolumes, period: 10 });
+
+  const dxyRSI = RSI.calculate({ values: dxyCloses, period: 14 });
+  const dxyMACD = MACD.calculate({ values: dxyCloses, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
+  const dxyVolMA = SMA.calculate({ values: dxyVolumes, period: 10 });
 
   const signals = [];
   let currentState = 'flat';
   let entryPrice = null;
   const tickSize = 0.0001;
   const minProfit = tickSize * 5;
+  const maxLoss = tickSize * 3;
+  let lastEntryTime = 0;
+  const cooldownMs = 5 * 60 * 1000; // 5분 쿨다운
 
-  for (let i = 200; i < candles.length; i++) {
-    const sigTime = candles[i].time * 1000;
-    const price = candles[i].close;
+  for (let i = 26; i < eurCandles.length; i++) {
+    const time = eurCandles[i].time * 1000;
+    const price = eurCandles[i].close;
 
-    const rsi = rsiArr[i - 200 + (200 - 14)];
-    const macd = macdArr[i - 200 + (200 - 26)];
-    const avgVol = volMA[i - 200 + (200 - 10)];
-    const vol = volumes[i];
+    const eRSI = eurRSI[i - 12];
+    const eMACD = eurMACD[i - 26];
+    const eVolMA = eurVolMA[i - 10];
+    const eVol = eurVolumes[i];
 
-    const smaShortPrev = shortMA[i - 200 - 1];
-    const smaShort = shortMA[i - 200];
-    const smaLongPrev = longMA[i - 200 - 1];
-    const smaLong = longMA[i - 200];
+    const dRSI = dxyRSI[i - 12];
+    const dMACD = dxyMACD[i - 26];
+    const dVolMA = dxyVolMA[i - 10];
+    const dVol = dxyVolumes[i];
 
-    if (!macd || rsi == null || !avgVol || !smaShortPrev || !smaLongPrev) continue;
+    if (!eMACD || eRSI == null || !eVolMA || !dMACD || dRSI == null || !dVolMA) continue;
 
-    // 골든/데드 크로스 진입 조건
-    const goldenCross = smaShortPrev < smaLongPrev && smaShort > smaLong;
-    const deadCross = smaShortPrev > smaLongPrev && smaShort < smaLong;
+    const eurBuySignal = eMACD.MACD < eMACD.signal && eRSI > 40 && eVol < eVolMA * 1.2;
+    const eurSellSignal = eMACD.MACD > eMACD.signal && eRSI < 60 && eVol > eVolMA * 0.8;
+    const dxyBuySignal = dMACD.MACD > dMACD.signal && dRSI < 60 && dVol > dVolMA * 0.8;
+    const dxySellSignal = dMACD.MACD < dMACD.signal && dRSI > 40 && dVol < dVolMA * 1.2;
+
+    const combinedBuy = eurBuySignal && dxySellSignal;
+    const combinedSell = eurSellSignal && dxyBuySignal;
+
+    if (currentState === 'flat' && (time - lastEntryTime < cooldownMs)) {
+      continue;
+    }
 
     if (currentState === 'flat') {
-      if ((macd.MACD > macd.signal && rsi < 60 && vol > avgVol * 0.8) || goldenCross) {
+      if (combinedSell) {
         currentState = 'short';
         entryPrice = price;
-        signals.push({ type: 'sell', entry: true, time: sigTime, price });
-      } else if ((macd.MACD < macd.signal && rsi > 40 && vol < avgVol * 1.2) || deadCross) {
+        lastEntryTime = time;
+        signals.push({ type: 'sell', entry: true, time, price });
+      } else if (combinedBuy) {
         currentState = 'long';
         entryPrice = price;
-        signals.push({ type: 'buy', entry: true, time: sigTime, price });
+        lastEntryTime = time;
+        signals.push({ type: 'buy', entry: true, time, price });
       }
     } else if (currentState === 'long') {
       if (price >= entryPrice + minProfit) {
         currentState = 'flat';
-        signals.push({ type: 'buy', entry: false, time: sigTime, price });
+        signals.push({ type: 'buy', entry: false, time, price });
         entryPrice = null;
+        lastEntryTime = time;
+      } else if (price <= entryPrice - maxLoss) {
+        currentState = 'flat';
+        signals.push({ type: 'stoploss_long', entry: false, time, price });
+        entryPrice = null;
+        lastEntryTime = time;
       }
     } else if (currentState === 'short') {
       if (price <= entryPrice - minProfit) {
         currentState = 'flat';
-        signals.push({ type: 'sell', entry: false, time: sigTime, price });
+        signals.push({ type: 'sell', entry: false, time, price });
         entryPrice = null;
+        lastEntryTime = time;
+      } else if (price >= entryPrice + maxLoss) {
+        currentState = 'flat';
+        signals.push({ type: 'stoploss_short', entry: false, time, price });
+        entryPrice = null;
+        lastEntryTime = time;
       }
     }
   }
 
+  // SMA 골든/데드 크로스 (생략 가능)
+
+  signals.sort((a, b) => a.time - b.time);
   return signals;
 };
 
 const DualOverlayChart = () => {
   const containerRef = useRef(null);
-  const [chartSize, setChartSize] = useState({ width: 0, height: window.innerHeight });
-  const [candles, setCandles] = useState(generateFakeCandles(80));
+  const [eurCandles, setEurCandles] = useState(generateFakeCandles(80));
+  const [dxyCandles, setDxyCandles] = useState(generateFakeDXY(80));
   const [signals, setSignals] = useState([]);
-  const [ichimokuData, setIchimokuData] = useState([]);
   const alertedSignals = useRef(new Set());
 
   const playSound = () => {
     const audio = new Audio('/notify.mp3');
     audio.play();
+  };
+
+  const handleBuyClick = () => {
+    sendSignal('buy', 1.2345);
+  };
+  const handleSellClick = () => {
+    sendSignal('sell', 1.2345);
   };
 
   useEffect(() => {
@@ -106,30 +161,6 @@ const DualOverlayChart = () => {
       window.removeEventListener('click', enableAudio);
     };
     window.addEventListener('click', enableAudio);
-  }, []);
-
-  const calculateIchimoku = (candles) => {
-    return IchimokuCloud.calculate({
-      high: candles.map(c => c.high),
-      low: candles.map(c => c.low),
-      conversionPeriod: 9,
-      basePeriod: 26,
-      spanPeriod: 52,
-      displacement: 26,
-    });
-  };
-
-  useEffect(() => {
-    const updateSize = () => {
-      if (!containerRef.current) return;
-      setChartSize({
-        width: containerRef.current.clientWidth,
-        height: containerRef.current.clientHeight || window.innerHeight,
-      });
-    };
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
   }, []);
 
   useEffect(() => {
@@ -157,8 +188,9 @@ const DualOverlayChart = () => {
         widget.onChartReady(() => {
           const chart = widget.chart();
           chart.createStudy("Ichimoku Cloud", false, false, null, {});
-          chart.createStudy("Moving Average", false, false, [50], { "color": "#00FF00" }); // Short MA
-          chart.createStudy("Moving Average", false, false, [200], { "color": "#FF0000" }); // Long MA
+          chart.createStudy('Moving Average', false, false, [10], {});
+          chart.createStudy('Moving Average', false, false, [20], {});
+          chart.createStudy('Moving Average', false, false, [60], {});
         });
 
         toast.info("차트가 준비되었습니다!", {
@@ -174,117 +206,72 @@ const DualOverlayChart = () => {
     };
   }, []);
 
-  // 🔄 실시간 데이터 업데이트
   useEffect(() => {
     const interval = setInterval(() => {
-      setCandles(prev => {
+      setEurCandles(prev => {
         const last = prev[prev.length - 1].close;
         const newCandle = generateFakeCandles(1, last)[0];
         const updated = [...prev.slice(1), newCandle];
 
-        const newSignals = generateSignals(updated);
-        const ichimoku = calculateIchimoku(updated);
-        setIchimokuData(ichimoku);
+        setDxyCandles(prevDxy => {
+          const lastDxy = prevDxy[prevDxy.length - 1].close;
+          const newDxy = generateFakeDXY(1, lastDxy)[0];
+          const updatedDxy = [...prevDxy.slice(1), newDxy];
 
-        const now = Date.now();
-        const lastCandleTime = updated[updated.length - 1].time * 1000;
+          const newSignals = generateSignals(updated, updatedDxy);
+          setSignals(newSignals);
 
-        newSignals.forEach(sig => {
-          const key = `${sig.type}-${sig.entry}-${sig.time}`;
+          const lastCandleTime = updated[updated.length - 1].time * 1000;
 
-          // ✅ 가장 최근 캔들 범위 내 신호만 알림
-          const isRecent = sig.time >= lastCandleTime - 15000 && sig.time <= lastCandleTime;
+          console.log('Last Candle Time:', new Date(lastCandleTime).toLocaleTimeString());
+          console.log('Generated Signals:', newSignals);
 
-          if (!alertedSignals.current.has(key) && isRecent) {
-            playSound();
-            toast.info(
-              `${sig.type === 'buy' ? '매수' : '매도'} ${sig.entry ? '진입' : '청산'}\n가격: ${sig.price.toFixed(5)}\n시간: ${new Date(sig.time).toLocaleTimeString()}`,
-              {
-                position: 'bottom-center',
-                autoClose: 4000,
-                theme: 'colored',
-              }
-            );
-            alertedSignals.current.add(key);
-          }
+          newSignals.forEach(sig => {
+            const key = `${sig.type}-${sig.entry}-${sig.time}`;
+
+            const isLatest = sig.time === lastCandleTime;
+
+            if (!alertedSignals.current.has(key) && isLatest) {
+              console.log(`Trigger Toast for Signal: ${sig.type} at ${new Date(sig.time).toLocaleTimeString()}`);
+
+              playSound();
+
+              toast.info(
+                `${sig.type === 'buy' ? '📈 매수' :
+                  sig.type === 'sell' ? '📉 매도' :
+                  sig.type === 'golden' ? '🟡 골든크로스' :
+                  sig.type === 'dead' ? '⚫ 데드크로스' : '신호'} 발생!`,
+                {
+                  position: 'bottom-center',
+                  theme: 'colored',
+                  autoClose: 4000,
+                }
+              );
+
+              alertedSignals.current.add(key);
+              sendSignal(sig.type, sig.price);
+            }
+          });
+
+          return updatedDxy;
         });
 
-        setSignals(newSignals);
         return updated;
       });
-    }, 10000);
+    }, 6000);
+
     return () => clearInterval(interval);
   }, []);
 
-  const timeToX = (time) => {
-    const times = candles.map(c => c.time);
-    const minTime = Math.min(...times);
-    const maxTime = Math.max(...times);
-    return ((time / 1000 - minTime) / (maxTime - minTime)) * chartSize.width;
-  };
-
   return (
     <>
-      <ToastContainer />
-      <div ref={containerRef} id="tradingview_chart" style={{ position: 'relative', width: '100%', height: '100vh' }}>
-        {/* 🔔 신호 아이콘 */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: chartSize.width,
-            height: chartSize.height,
-            pointerEvents: 'none',
-            userSelect: 'none',
-            zIndex: 9999,
-          }}
-        >
-          {signals.map((sig, i) => {
-            const x = timeToX(sig.time);
-            if (x < 0 || x > chartSize.width) return null;
-            return (
-              <div
-                key={i}
-                title={`${sig.type.toUpperCase()} ${sig.entry ? '진입' : '청산'} - ${new Date(sig.time).toLocaleTimeString()}`}
-                style={{
-                  position: 'absolute',
-                  top: 10 + i * 20,
-                  left: x,
-                  color: sig.type === 'buy' ? 'green' : 'red',
-                  fontSize: 14,
-                  fontWeight: 'bold',
-                }}
-              >
-                {sig.type === 'buy' ? '🔼' : '🔽'}
-              </div>
-            );
-          })}
-
-          {/* ☁️ 일목균형 구름 */}
-          {ichimokuData.map((item, idx) => {
-            const candleIdx = idx + 26;
-            if (!candles[candleIdx]) return null;
-            const x = timeToX(candles[candleIdx].time * 1000);
-            if (x < 0 || x > chartSize.width) return null;
-            return (
-              <div
-                key={idx}
-                style={{
-                  position: 'absolute',
-                  left: x,
-                  top: 0,
-                  height: chartSize.height,
-                  width: 1,
-                  backgroundColor: item.spanA > item.spanB
-                    ? 'rgba(0,255,0,0.2)'
-                    : 'rgba(255,0,0,0.2)',
-                }}
-              />
-            );
-          })}
-        </div>
+      <div ref={containerRef} id="tradingview_chart" style={{ width: '100%', height: '100vh' }} />
+      <TestSignalButton />
+      <div>
+        <button onClick={handleBuyClick}>매수 신호 보내기</button>
+        <button onClick={handleSellClick}>매도 신호 보내기</button>
       </div>
+      <ToastContainer position="bottom-center" />
     </>
   );
 };

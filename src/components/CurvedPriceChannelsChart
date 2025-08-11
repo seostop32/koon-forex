@@ -1,0 +1,113 @@
+import React, { useEffect, useRef } from 'react';
+import { createChart } from 'lightweight-charts';
+
+// 간단 가짜 가격 데이터 (실제 데이터로 교체 가능)
+const generateFakePrices = (count = 100, startPrice = 1.1) => {
+  let price = startPrice;
+  const data = [];
+  for(let i=0; i<count; i++) {
+    price += (Math.random() - 0.5) * 0.005;
+    data.push({
+      time: Math.floor(Date.now()/1000) + i * 60,
+      value: parseFloat(price.toFixed(5)),
+    });
+  }
+  return data;
+};
+
+// 간단한 곡선 채널 계산 (가장 간단하게 이동평균 ± 변동폭)
+// 실제 Zeiierman 방식은 좀 더 복잡할 수 있음.
+const calculateCurvedPriceChannels = (data, length = 20) => {
+  const sma = [];
+  const upper = [];
+  const lower = [];
+
+  for (let i = 0; i < data.length; i++) {
+    if (i < length - 1) {
+      sma.push(null);
+      upper.push(null);
+      lower.push(null);
+      continue;
+    }
+    let sum = 0;
+    for (let j = i - length + 1; j <= i; j++) {
+      sum += data[j].value;
+    }
+    const avg = sum / length;
+    sma.push(avg);
+
+    // 변동폭: stddev 대신 간단히 평균 대비 ±0.01 (임시)
+    upper.push(avg + 0.01);
+    lower.push(avg - 0.01);
+  }
+
+  return { sma, upper, lower };
+};
+
+const CurvedPriceChannelsChart = () => {
+  const chartContainerRef = useRef();
+
+  useEffect(() => {
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 400,
+      layout: {
+        backgroundColor: '#ffffff',
+        textColor: '#000',
+      },
+      grid: {
+        vertLines: { color: '#eee' },
+        horzLines: { color: '#eee' },
+      },
+      crosshair: {
+        mode: 1,
+      },
+      rightPriceScale: {
+        borderColor: '#ccc',
+      },
+      timeScale: {
+        borderColor: '#ccc',
+      },
+    });
+
+    const candleSeries = chart.addLineSeries({
+      color: '#0000ff',
+      lineWidth: 2,
+      priceLineVisible: false,
+    });
+
+    // 데이터 생성
+    const priceData = generateFakePrices(100);
+
+    // 채널 계산
+    const { sma, upper, lower } = calculateCurvedPriceChannels(priceData);
+
+    // priceSeries에 가격 데이터 세팅
+    candleSeries.setData(priceData);
+
+    // 채널용 라인 시리즈 생성
+    const upperSeries = chart.addLineSeries({ color: 'rgba(255,0,0,0.5)', lineWidth: 1 });
+    const lowerSeries = chart.addLineSeries({ color: 'rgba(0,128,0,0.5)', lineWidth: 1 });
+    const smaSeries = chart.addLineSeries({ color: '#ffa500', lineWidth: 1, lineStyle: 2 }); // 주황 점선
+
+    // null 제거하고 데이터 세팅
+    upperSeries.setData(priceData.map((p, i) => ({ time: p.time, value: upper[i] })).filter(d => d.value !== null));
+    lowerSeries.setData(priceData.map((p, i) => ({ time: p.time, value: lower[i] })).filter(d => d.value !== null));
+    smaSeries.setData(priceData.map((p, i) => ({ time: p.time, value: sma[i] })).filter(d => d.value !== null));
+
+    // 리사이즈 핸들러
+    const handleResize = () => {
+      chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, []);
+
+  return <div ref={chartContainerRef} style={{ width: '100%', height: '400px' }} />;
+};
+
+export default CurvedPriceChannelsChart;

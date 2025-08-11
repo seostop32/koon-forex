@@ -1,10 +1,12 @@
 // DualOverlayChart.js
 import React, { useEffect, useRef, useState } from 'react';
-import { RSI, MACD, SMA, IchimokuCloud } from 'technicalindicators';
+import { RSI, MACD, SMA } from 'technicalindicators';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { sendSignal } from './SignalSender';
+import TestSignalButton from './TestSignalButton';
 
-// EUR/USD 가짜 캔들 생성 함수
+// 가짜 캔들 생성 함수
 const generateFakeCandles = (count = 80, startPrice = 1.1) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
@@ -20,7 +22,7 @@ const generateFakeCandles = (count = 80, startPrice = 1.1) => {
   });
 };
 
-// 달러인덱스(DXY) 가짜 데이터 생성 (USD 강세로 EUR/USD 반대 움직임 시뮬)
+// 달러인덱스(DXY) 가짜 데이터 생성
 const generateFakeDXY = (count = 80, startPrice = 105) => {
   const now = Math.floor(Date.now() / 1000);
   return Array.from({ length: count }, (_, i) => {
@@ -36,11 +38,10 @@ const generateFakeDXY = (count = 80, startPrice = 105) => {
   });
 };
 
-// 신호 생성 함수: EUR/USD와 DXY 신호 합성 (개선 버전)
+// 신호 생성 함수
 const generateSignals = (eurCandles, dxyCandles) => {
   const eurCloses = eurCandles.map(c => c.close);
   const dxyCloses = dxyCandles.map(c => c.close);
-
   const eurVolumes = eurCandles.map(c => c.volume);
   const dxyVolumes = dxyCandles.map(c => c.volume);
 
@@ -77,21 +78,15 @@ const generateSignals = (eurCandles, dxyCandles) => {
 
     if (!eMACD || eRSI == null || !eVolMA || !dMACD || dRSI == null || !dVolMA) continue;
 
-    // EUR/USD 신호
     const eurBuySignal = eMACD.MACD < eMACD.signal && eRSI > 40 && eVol < eVolMA * 1.2;
     const eurSellSignal = eMACD.MACD > eMACD.signal && eRSI < 60 && eVol > eVolMA * 0.8;
-
-    // DXY 신호 (달러 강세면 매수 신호, 반대면 매도 신호)
     const dxyBuySignal = dMACD.MACD > dMACD.signal && dRSI < 60 && dVol > dVolMA * 0.8;
     const dxySellSignal = dMACD.MACD < dMACD.signal && dRSI > 40 && dVol < dVolMA * 1.2;
 
-    // 복합 신호 판단 (EUR/USD 신호와 DXY 신호 반대인지 확인)
     const combinedBuy = eurBuySignal && dxySellSignal;
     const combinedSell = eurSellSignal && dxyBuySignal;
 
-    // 쿨다운 체크
     if (currentState === 'flat' && (time - lastEntryTime < cooldownMs)) {
-      // 쿨다운 중이므로 진입 신호 무시
       continue;
     }
 
@@ -108,7 +103,6 @@ const generateSignals = (eurCandles, dxyCandles) => {
         signals.push({ type: 'buy', entry: true, time, price });
       }
     } else if (currentState === 'long') {
-      // 수익 실현 or 손절 조건 추가
       if (price >= entryPrice + minProfit) {
         currentState = 'flat';
         signals.push({ type: 'buy', entry: false, time, price });
@@ -135,26 +129,6 @@ const generateSignals = (eurCandles, dxyCandles) => {
     }
   }
 
-  // SMA 골든/데드 크로스 추가 (기존과 동일)
-  const closePrices = eurCloses;
-  const sma10 = SMA.calculate({ values: closePrices, period: 10 });
-  const sma20 = SMA.calculate({ values: closePrices, period: 20 });
-
-  for (let i = 1; i < sma10.length; i++) {
-    const prev10 = sma10[i - 1];
-    const prev20 = sma20[i - 1];
-    const curr10 = sma10[i];
-    const curr20 = sma20[i];
-
-    if (prev10 < prev20 && curr10 >= curr20) {
-      const crossTime = eurCandles[i + 10].time * 1000;
-      signals.push({ type: 'golden', entry: null, time: crossTime, price: closePrices[i + 10] });
-    } else if (prev10 > prev20 && curr10 <= curr20) {
-      const crossTime = eurCandles[i + 10].time * 1000;
-      signals.push({ type: 'dead', entry: null, time: crossTime, price: closePrices[i + 10] });
-    }
-  }
-
   signals.sort((a, b) => a.time - b.time);
   return signals;
 };
@@ -172,6 +146,7 @@ const DualOverlayChart = () => {
   };
 
   useEffect(() => {
+    // 유저가 클릭해야 사운드가 재생되는 브라우저 정책 우회
     const enableAudio = () => {
       const audio = new Audio('/notify.mp3');
       audio.play().catch(() => {});
@@ -180,8 +155,8 @@ const DualOverlayChart = () => {
     window.addEventListener('click', enableAudio);
   }, []);
 
-  // TradingView 차트 로드 & 10/20/60 이동평균선 + 이치모쿠 추가
   useEffect(() => {
+    // 트레이딩뷰 차트 스크립트 로딩 및 세팅
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
@@ -224,7 +199,6 @@ const DualOverlayChart = () => {
     };
   }, []);
 
-  // 실시간 데이터 업데이트 시뮬레이션 및 신호 생성
   useEffect(() => {
     const interval = setInterval(() => {
       setEurCandles(prev => {
@@ -240,33 +214,49 @@ const DualOverlayChart = () => {
           const newSignals = generateSignals(updated, updatedDxy);
           setSignals(newSignals);
 
-          // 실시간 업데이트 useEffect 안에서
-          const lastCandleTime = updated[updated.length - 1].time * 1000;
-
-          newSignals.forEach(sig => {
+          // 새로 발견된 신호 중 중복 아닌 것들만 필터링
+          const newUniqueSignals = newSignals.filter(sig => {
             const key = `${sig.type}-${sig.entry}-${sig.time}`;
-
-            // ✅ 조건: 가장 최근 캔들의 시간에 발생한 신호만 허용
-            const isLatest = sig.time === lastCandleTime;
-
-            if (!alertedSignals.current.has(key) && isLatest) {
-              playSound();
-
-              toast.info(
-                `${sig.type === 'buy' ? '📈 매수' :
-                  sig.type === 'sell' ? '📉 매도' :
-                  sig.type === 'golden' ? '🟡 골든크로스' :
-                  sig.type === 'dead' ? '⚫ 데드크로스' : '신호'} 발생!`,
-                {
-                  position: 'bottom-center',
-                  theme: 'colored',
-                  autoClose: 4000,
-                }
-              );
-
-              alertedSignals.current.add(key);
-            }
+            return !alertedSignals.current.has(key);
           });
+
+          if (newUniqueSignals.length > 0) {
+            // 가장 최신 신호만 토스트 띄움
+            const lastSignal = newUniqueSignals[newUniqueSignals.length - 1];
+            const key = `${lastSignal.type}-${lastSignal.entry}-${lastSignal.time}`;
+
+            // 이전 토스트 자동 닫기 (react-toastify 자동 처리되긴 하지만 확실히)
+            toast.dismiss();
+
+            // 토스트 띄우기 (포커스나 커서 건들지 않는 옵션)
+            toast.info(
+              `${lastSignal.type === 'buy' ? '📈 매수' :
+                lastSignal.type === 'sell' ? '📉 매도' :
+                lastSignal.type === 'stoploss_long' ? '🚫 롱 손절' :
+                lastSignal.type === 'stoploss_short' ? '🚫 숏 손절' : '신호'} 발생!`,
+              {
+                position: 'bottom-center',
+                autoClose: 4000,
+                pauseOnFocusLoss: false,
+                pauseOnHover: false,
+                closeOnClick: false,
+                draggable: false,
+                theme: 'colored',
+              }
+            );
+
+            // 사운드 재생
+            playSound();
+
+            // 신호 송신
+            sendSignal(lastSignal.type, lastSignal.entry);
+
+            // 중복 방지용 저장
+            newUniqueSignals.forEach(sig => {
+              const key = `${sig.type}-${sig.entry}-${sig.time}`;
+              alertedSignals.current.add(key);
+            });
+          }
 
           return updatedDxy;
         });
@@ -276,12 +266,13 @@ const DualOverlayChart = () => {
     }, 6000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, []);  
 
   return (
     <>
       <div ref={containerRef} id="tradingview_chart" style={{ width: '100%', height: '100vh' }} />
-      <ToastContainer position="bottom-center" />
+      <ToastContainer />
+      <TestSignalButton />
     </>
   );
 };
