@@ -210,19 +210,18 @@ const DualOverlayChart = () => {
           height: window.innerHeight,
           theme: 'light',
           locale: 'en',
-          autosize: false,
+          autosize: true,  // true로 바꿔보기
           hide_top_toolbar: true,
           timezone: 'Asia/Seoul',
-          style: '1',
+          style: 1,
         });
 
         widget.onChartReady(() => {
           const chart = widget.chart();
-          chart.createStudy("Ichimoku Cloud", false, false, null, {});
-          // 10, 20, 60 이동평균선 추가
-          chart.createStudy('Moving Average', false, false, [10], {});
-          chart.createStudy('Moving Average', false, false, [20], {});
-          chart.createStudy('Moving Average', false, false, [60], {});
+          chart.createStudy("Ichimoku Cloud", false, true);
+          chart.createStudy('Moving Average', false, true, [10], {});
+          chart.createStudy('Moving Average', false, true, [20], {});
+          chart.createStudy('Moving Average', false, true, [60], {});
         });
 
         toast.info("차트가 준비되었습니다!", {
