@@ -36,14 +36,14 @@ const generateFakeDXY = (count = 80, startPrice = 105) => {
   });
 };
 
-// 신호 생성 함수: EUR/USD와 DXY 복합, 그리고 이평선 골든/데드크로스 신호 포함
+// 신호 생성 함수: EUR/USD와 DXY 신호 합성 (개선 버전)
 const generateSignals = (eurCandles, dxyCandles) => {
   const eurCloses = eurCandles.map(c => c.close);
   const dxyCloses = dxyCandles.map(c => c.close);
+
   const eurVolumes = eurCandles.map(c => c.volume);
   const dxyVolumes = dxyCandles.map(c => c.volume);
 
-  // 지표 계산
   const eurRSI = RSI.calculate({ values: eurCloses, period: 14 });
   const eurMACD = MACD.calculate({ values: eurCloses, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
   const eurVolMA = SMA.calculate({ values: eurVolumes, period: 10 });
@@ -56,9 +56,11 @@ const generateSignals = (eurCandles, dxyCandles) => {
   let currentState = 'flat';
   let entryPrice = null;
   const tickSize = 0.0001;
-  const minProfit = tickSize * 10; // 수익 목표 2배 강화 (5 -> 10)
+  const minProfit = tickSize * 5;
+  const maxLoss = tickSize * 3;
+  let lastEntryTime = 0;
+  const cooldownMs = 5 * 60 * 1000; // 5분 쿨다운
 
-  // 26부터 시작 (MACD slowPeriod 보정)
   for (let i = 26; i < eurCandles.length; i++) {
     const time = eurCandles[i].time * 1000;
     const price = eurCandles[i].close;
@@ -75,56 +77,68 @@ const generateSignals = (eurCandles, dxyCandles) => {
 
     if (!eMACD || eRSI == null || !eVolMA || !dMACD || dRSI == null || !dVolMA) continue;
 
-    // 강화된 EUR/USD 신호 (볼륨과 RSI 조건 엄격히)
-    const eurBuySignal = eMACD.MACD < eMACD.signal && eRSI > 45 && eVol < eVolMA * 1.1;
-    const eurSellSignal = eMACD.MACD > eMACD.signal && eRSI < 55 && eVol > eVolMA * 0.9;
+    // EUR/USD 신호
+    const eurBuySignal = eMACD.MACD < eMACD.signal && eRSI > 40 && eVol < eVolMA * 1.2;
+    const eurSellSignal = eMACD.MACD > eMACD.signal && eRSI < 60 && eVol > eVolMA * 0.8;
 
-    // DXY 신호 반대 조건 강화
-    const dxyBuySignal = dMACD.MACD > dMACD.signal && dRSI < 55 && dVol > dVolMA * 0.9;
-    const dxySellSignal = dMACD.MACD < dMACD.signal && dRSI > 45 && dVol < dVolMA * 1.1;
+    // DXY 신호 (달러 강세면 매수 신호, 반대면 매도 신호)
+    const dxyBuySignal = dMACD.MACD > dMACD.signal && dRSI < 60 && dVol > dVolMA * 0.8;
+    const dxySellSignal = dMACD.MACD < dMACD.signal && dRSI > 40 && dVol < dVolMA * 1.2;
 
-    // 복합 신호 판단 (EUR/USD 신호와 DXY 신호 반대)
+    // 복합 신호 판단 (EUR/USD 신호와 DXY 신호 반대인지 확인)
     const combinedBuy = eurBuySignal && dxySellSignal;
     const combinedSell = eurSellSignal && dxyBuySignal;
+
+    // 쿨다운 체크
+    if (currentState === 'flat' && (time - lastEntryTime < cooldownMs)) {
+      // 쿨다운 중이므로 진입 신호 무시
+      continue;
+    }
 
     if (currentState === 'flat') {
       if (combinedSell) {
         currentState = 'short';
         entryPrice = price;
+        lastEntryTime = time;
         signals.push({ type: 'sell', entry: true, time, price });
       } else if (combinedBuy) {
         currentState = 'long';
         entryPrice = price;
+        lastEntryTime = time;
         signals.push({ type: 'buy', entry: true, time, price });
       }
     } else if (currentState === 'long') {
-      // 이익 실현 및 부분 손절 등 세밀하게 조정 가능
+      // 수익 실현 or 손절 조건 추가
       if (price >= entryPrice + minProfit) {
         currentState = 'flat';
         signals.push({ type: 'buy', entry: false, time, price });
         entryPrice = null;
-      } else if (price <= entryPrice - minProfit / 2) { // 손절선 반영
+        lastEntryTime = time;
+      } else if (price <= entryPrice - maxLoss) {
         currentState = 'flat';
-        signals.push({ type: 'sell', entry: false, time, price, stopLoss: true });
+        signals.push({ type: 'stoploss_long', entry: false, time, price });
         entryPrice = null;
+        lastEntryTime = time;
       }
     } else if (currentState === 'short') {
       if (price <= entryPrice - minProfit) {
         currentState = 'flat';
         signals.push({ type: 'sell', entry: false, time, price });
         entryPrice = null;
-      } else if (price >= entryPrice + minProfit / 2) {
+        lastEntryTime = time;
+      } else if (price >= entryPrice + maxLoss) {
         currentState = 'flat';
-        signals.push({ type: 'buy', entry: false, time, price, stopLoss: true });
+        signals.push({ type: 'stoploss_short', entry: false, time, price });
         entryPrice = null;
+        lastEntryTime = time;
       }
     }
   }
 
-  // 10/20/60 SMA 계산 & 골든/데드 크로스 시그널 추가
-  const sma10 = SMA.calculate({ values: eurCloses, period: 10 });
-  const sma20 = SMA.calculate({ values: eurCloses, period: 20 });
-  const sma60 = SMA.calculate({ values: eurCloses, period: 60 });
+  // SMA 골든/데드 크로스 추가 (기존과 동일)
+  const closePrices = eurCloses;
+  const sma10 = SMA.calculate({ values: closePrices, period: 10 });
+  const sma20 = SMA.calculate({ values: closePrices, period: 20 });
 
   for (let i = 1; i < sma10.length; i++) {
     const prev10 = sma10[i - 1];
@@ -133,19 +147,15 @@ const generateSignals = (eurCandles, dxyCandles) => {
     const curr20 = sma20[i];
 
     if (prev10 < prev20 && curr10 >= curr20) {
-      // 골든 크로스 발생
       const crossTime = eurCandles[i + 10].time * 1000;
-      signals.push({ type: 'golden', entry: null, time: crossTime, price: eurCloses[i + 10] });
+      signals.push({ type: 'golden', entry: null, time: crossTime, price: closePrices[i + 10] });
     } else if (prev10 > prev20 && curr10 <= curr20) {
-      // 데드 크로스 발생
       const crossTime = eurCandles[i + 10].time * 1000;
-      signals.push({ type: 'dead', entry: null, time: crossTime, price: eurCloses[i + 10] });
+      signals.push({ type: 'dead', entry: null, time: crossTime, price: closePrices[i + 10] });
     }
   }
 
-  // signals 시간 순 정렬
   signals.sort((a, b) => a.time - b.time);
-
   return signals;
 };
 
