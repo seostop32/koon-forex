@@ -240,29 +240,30 @@ const DualOverlayChart = () => {
           const newSignals = generateSignals(updated, updatedDxy);
           setSignals(newSignals);
 
-          // 최근 신호 알림 및 사운드 재생
-          const lastTime = updated[updated.length - 1].time * 1000;
+          // 실시간 업데이트 useEffect 안에서
+          const lastCandleTime = updated[updated.length - 1].time * 1000;
+
           newSignals.forEach(sig => {
             const key = `${sig.type}-${sig.entry}-${sig.time}`;
-            const isRecent = sig.time >= lastTime - 15000 && sig.time <= lastTime;
-            if (!alertedSignals.current.has(key) && isRecent) {
+
+            // ✅ 조건: 가장 최근 캔들의 시간에 발생한 신호만 허용
+            const isLatest = sig.time === lastCandleTime;
+
+            if (!alertedSignals.current.has(key) && isLatest) {
               playSound();
-              if (sig.type === 'buy' || sig.type === 'golden') {
-                toast.error(
-                  `${sig.type === 'buy' ? '매수' : '골든크로스'} 신호 발생! 가격: ${sig.price.toFixed(5)} 시간: ${new Date(sig.time).toLocaleTimeString()}`,
-                  { position: 'bottom-center', theme: 'colored' }
-                );
-              } else if (sig.type === 'sell' || sig.type === 'dead') {
-                toast.info(
-                  `${sig.type === 'sell' ? '매도' : '데드크로스'} 신호 발생! 가격: ${sig.price.toFixed(5)} 시간: ${new Date(sig.time).toLocaleTimeString()}`,
-                  { position: 'bottom-center', theme: 'colored' }
-                );
-              } else if ((sig.type === 'buy' && sig.entry === false) || (sig.type === 'sell' && sig.entry === false)) {
-                toast.success(
-                  `${sig.type === 'buy' ? '매수 청산' : '매도 청산'} 신호 발생! 가격: ${sig.price.toFixed(5)} 시간: ${new Date(sig.time).toLocaleTimeString()}`,
-                  { position: 'bottom-center', theme: 'colored' }
-                );
-              }
+
+              toast.info(
+                `${sig.type === 'buy' ? '📈 매수' :
+                  sig.type === 'sell' ? '📉 매도' :
+                  sig.type === 'golden' ? '🟡 골든크로스' :
+                  sig.type === 'dead' ? '⚫ 데드크로스' : '신호'} 발생!`,
+                {
+                  position: 'bottom-center',
+                  theme: 'colored',
+                  autoClose: 4000,
+                }
+              );
+
               alertedSignals.current.add(key);
             }
           });
