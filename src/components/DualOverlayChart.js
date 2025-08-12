@@ -166,14 +166,14 @@ const DualOverlayChart = () => {
       if (window.TradingView && containerRef.current) {
         const widget = new window.TradingView.widget({
           symbol: 'FX:EURUSD',
-          interval: '1',
+          interval: '15',
           container_id: 'tradingview_chart',
           width: containerRef.current.clientWidth,
           height: window.innerHeight,
           theme: 'light',
           locale: 'en',
-          autosize: false,
-          hide_top_toolbar: true,
+          autosize: true,
+          hide_top_toolbar: false,
           timezone: 'Asia/Seoul',
           style: '1',
         });
