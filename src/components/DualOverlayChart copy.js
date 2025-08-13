@@ -129,8 +129,6 @@ const generateSignals = (eurCandles, dxyCandles) => {
     }
   }
 
-  // SMA 골든/데드 크로스 (생략 가능)
-
   signals.sort((a, b) => a.time - b.time);
   return signals;
 };
@@ -147,14 +145,8 @@ const DualOverlayChart = () => {
     audio.play();
   };
 
-  const handleBuyClick = () => {
-    sendSignal('buy', 1.2345);
-  };
-  const handleSellClick = () => {
-    sendSignal('sell', 1.2345);
-  };
-
   useEffect(() => {
+    // 유저가 클릭해야 사운드가 재생되는 브라우저 정책 우회
     const enableAudio = () => {
       const audio = new Audio('/notify.mp3');
       audio.play().catch(() => {});
@@ -164,6 +156,7 @@ const DualOverlayChart = () => {
   }, []);
 
   useEffect(() => {
+    // 트레이딩뷰 차트 스크립트 로딩 및 세팅
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
@@ -173,14 +166,14 @@ const DualOverlayChart = () => {
       if (window.TradingView && containerRef.current) {
         const widget = new window.TradingView.widget({
           symbol: 'FX:EURUSD',
-          interval: '1',
+          interval: '15',
           container_id: 'tradingview_chart',
           width: containerRef.current.clientWidth,
           height: window.innerHeight,
           theme: 'light',
           locale: 'en',
-          autosize: false,
-          hide_top_toolbar: true,
+          autosize: true,
+          hide_top_toolbar: false,
           timezone: 'Asia/Seoul',
           style: '1',
         });
@@ -221,37 +214,49 @@ const DualOverlayChart = () => {
           const newSignals = generateSignals(updated, updatedDxy);
           setSignals(newSignals);
 
-          const lastCandleTime = updated[updated.length - 1].time * 1000;
-
-          console.log('Last Candle Time:', new Date(lastCandleTime).toLocaleTimeString());
-          console.log('Generated Signals:', newSignals);
-
-          newSignals.forEach(sig => {
+          // 새로 발견된 신호 중 중복 아닌 것들만 필터링
+          const newUniqueSignals = newSignals.filter(sig => {
             const key = `${sig.type}-${sig.entry}-${sig.time}`;
-
-            const isLatest = sig.time === lastCandleTime;
-
-            if (!alertedSignals.current.has(key) && isLatest) {
-              console.log(`Trigger Toast for Signal: ${sig.type} at ${new Date(sig.time).toLocaleTimeString()}`);
-
-              playSound();
-
-              toast.info(
-                `${sig.type === 'buy' ? '📈 매수' :
-                  sig.type === 'sell' ? '📉 매도' :
-                  sig.type === 'golden' ? '🟡 골든크로스' :
-                  sig.type === 'dead' ? '⚫ 데드크로스' : '신호'} 발생!`,
-                {
-                  position: 'bottom-center',
-                  theme: 'colored',
-                  autoClose: 4000,
-                }
-              );
-
-              alertedSignals.current.add(key);
-              sendSignal(sig.type, sig.price);
-            }
+            return !alertedSignals.current.has(key);
           });
+
+          if (newUniqueSignals.length > 0) {
+            // 가장 최신 신호만 토스트 띄움
+            const lastSignal = newUniqueSignals[newUniqueSignals.length - 1];
+            const key = `${lastSignal.type}-${lastSignal.entry}-${lastSignal.time}`;
+
+            // 이전 토스트 자동 닫기 (react-toastify 자동 처리되긴 하지만 확실히)
+            toast.dismiss();
+
+            // 토스트 띄우기 (포커스나 커서 건들지 않는 옵션)
+            toast.info(
+              `${lastSignal.type === 'buy' ? '📈 매수' :
+                lastSignal.type === 'sell' ? '📉 매도' :
+                lastSignal.type === 'stoploss_long' ? '🚫 롱 손절' :
+                lastSignal.type === 'stoploss_short' ? '🚫 숏 손절' : '신호'} 발생!`,
+              {
+                position: 'bottom-center',
+                autoClose: 4000,
+                pauseOnFocusLoss: false,
+                pauseOnHover: false,
+                closeOnClick: false,
+                draggable: false,
+                theme: 'colored',
+              }
+            );
+
+            // 사운드 재생
+            playSound();
+
+            // 신호 송신
+            sendSignal(lastSignal.type, lastSignal.entry);
+
+            // 중복 방지용 저장
+            newUniqueSignals.forEach(sig => {
+              const key = `${sig.type}-${sig.entry}-${sig.time}`;
+              alertedSignals.current.add(key);
+            });
+          }
 
           return updatedDxy;
         });
@@ -261,17 +266,13 @@ const DualOverlayChart = () => {
     }, 6000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, []);  
 
   return (
     <>
       <div ref={containerRef} id="tradingview_chart" style={{ width: '100%', height: '100vh' }} />
+      <ToastContainer />
       <TestSignalButton />
-      <div>
-        <button onClick={handleBuyClick}>매수 신호 보내기</button>
-        <button onClick={handleSellClick}>매도 신호 보내기</button>
-      </div>
-      <ToastContainer position="bottom-center" />
     </>
   );
 };
