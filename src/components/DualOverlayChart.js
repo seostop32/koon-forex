@@ -2,7 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-function calculateATR(candles, period = 10) {
+// EMA 계산 함수 (기간 1)
+function calculateEMA(values, period = 1) {
+  const k = 2 / (period + 1);
+  let emaArray = [];
+  values.forEach((val, i) => {
+    if (i === 0) emaArray.push(val);
+    else emaArray.push(val * k + emaArray[i - 1] * (1 - k));
+  });
+  return emaArray;
+}
+
+// UT Bot 신호 계산 함수 (파인스크립트 로직 반영)
+function utBotSignals(candles, keyValue = 1, atrPeriod = 10) {
+  if (candles.length < atrPeriod + 2) return [];
+
+  // ATR 계산
   const trs = [];
   for (let i = 1; i < candles.length; i++) {
     const high = candles[i].high;
@@ -11,65 +26,55 @@ function calculateATR(candles, period = 10) {
     const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
     trs.push(tr);
   }
+
   const atrs = [];
   for (let i = 0; i < trs.length; i++) {
-    if (i < period - 1) atrs.push(null);
+    if (i < atrPeriod - 1) atrs.push(null);
     else {
-      const slice = trs.slice(i - period + 1, i + 1);
+      const slice = trs.slice(i - atrPeriod + 1, i + 1);
       const sum = slice.reduce((a, b) => a + b, 0);
-      atrs.push(sum / period);
+      atrs.push(sum / atrPeriod);
     }
   }
-  return atrs;
-}
 
-function utBotSignals(candles, keyValue = 1, atrPeriod = 10) {
-  if (candles.length < atrPeriod + 2) return [];
-
+  // src: close 가격 배열
   const closes = candles.map(c => c.close);
-  const atrs = calculateATR(candles, atrPeriod);
+
+  // EMA(1) 계산 (사실은 close랑 동일하지만 파인스크립트에서 사용하니까 맞춤)
+  const ema = calculateEMA(closes, 1);
 
   let trailingStop = Array(candles.length).fill(0);
-  let pos = Array(candles.length).fill(0);
-
   trailingStop[0] = closes[0];
-  pos[0] = 0;
 
   for (let i = 1; i < candles.length; i++) {
-    if (atrs[i - 1] == null) {
+    if (atrs[i - 1] === null) {
       trailingStop[i] = trailingStop[i - 1];
-      pos[i] = pos[i - 1];
       continue;
     }
 
     const nLoss = keyValue * atrs[i - 1];
     const src = closes[i];
+    const prevTS = trailingStop[i - 1];
+    const prevSrc = closes[i - 1];
 
-    if (src > trailingStop[i - 1] && closes[i - 1] > trailingStop[i - 1]) {
-      trailingStop[i] = Math.max(trailingStop[i - 1], src - nLoss);
-    } else if (src < trailingStop[i - 1] && closes[i - 1] < trailingStop[i - 1]) {
-      trailingStop[i] = Math.min(trailingStop[i - 1], src + nLoss);
-    } else if (src > trailingStop[i - 1]) {
+    if (src > prevTS && prevSrc > prevTS) {
+      trailingStop[i] = Math.max(prevTS, src - nLoss);
+    } else if (src < prevTS && prevSrc < prevTS) {
+      trailingStop[i] = Math.min(prevTS, src + nLoss);
+    } else if (src > prevTS) {
       trailingStop[i] = src - nLoss;
     } else {
       trailingStop[i] = src + nLoss;
     }
-
-    if (closes[i - 1] < trailingStop[i - 1] && src > trailingStop[i]) {
-      pos[i] = 1;
-    } else if (closes[i - 1] > trailingStop[i - 1] && src < trailingStop[i]) {
-      pos[i] = -1;
-    } else {
-      pos[i] = pos[i - 1];
-    }
   }
 
   const signals = [];
-  for (let i = 1; i < pos.length; i++) {
-    if (pos[i] !== pos[i - 1]) {
-      if (pos[i] === 1) signals.push({ time: candles[i].time, type: 'buy', price: closes[i] });
-      else if (pos[i] === -1) signals.push({ time: candles[i].time, type: 'sell', price: closes[i] });
-    }
+  for (let i = 1; i < candles.length; i++) {
+    const buy = closes[i] > trailingStop[i] && ema[i - 1] <= trailingStop[i - 1] && ema[i] > trailingStop[i];
+    const sell = closes[i] < trailingStop[i] && ema[i - 1] >= trailingStop[i - 1] && ema[i] < trailingStop[i];
+
+    if (buy) signals.push({ time: candles[i].time, type: 'buy', price: closes[i] });
+    if (sell) signals.push({ time: candles[i].time, type: 'sell', price: closes[i] });
   }
 
   return signals;
@@ -77,7 +82,7 @@ function utBotSignals(candles, keyValue = 1, atrPeriod = 10) {
 
 const DualOverlayChart = () => {
   const containerRef = useRef(null);
-  const chartWidgetRef = useRef(null);
+  const chartRef = useRef(null);
   const [bars, setBars] = useState([]);
   const alerted = useRef(new Set());
 
@@ -89,29 +94,27 @@ const DualOverlayChart = () => {
 
     script.onload = () => {
       if (window.TradingView && containerRef.current) {
-        chartWidgetRef.current = new window.TradingView.widget({
+        chartRef.current = new window.TradingView.widget({
           symbol: 'FX:EURUSD',
           interval: '1',
           container_id: 'tradingview_chart',
           autosize: true,
-          timezone: 'Asia/Seoul',
           theme: 'light',
           locale: 'en',
+          timezone: 'Asia/Seoul',
           allow_symbol_change: true,
         });
 
-        // widget.ready() Promise가 생긴 걸로 알고 있음, 없으면 2초 딜레이 후 호출해봐도 됨
-        // 여기서는 setTimeout으로 딜레이 후 접근하는 안전한 방법
-        setTimeout(() => {
-          const chart = chartWidgetRef.current.chart();
+        chartRef.current.onReady(() => {
+          const chart = chartRef.current.chart();
 
-          chart.getBars({ symbol: 'FX:EURUSD', resolution: '1', count: 100 }).then((bars) => {
-            setBars(bars);
-          });
+          chart.getBars({ symbol: 'FX:EURUSD', resolution: '1', count: 100 })
+            .then(initialBars => {
+              setBars(initialBars);
+            });
 
-          // 바 변경 이벤트 구독
-          chart.subscribeBars('FX:EURUSD', (bar) => {
-            setBars((prev) => {
+          chart.onRealtimeUpdate(bar => {
+            setBars(prev => {
               const newBars = [...prev];
               if (newBars.length && newBars[newBars.length - 1].time === bar.time) {
                 newBars[newBars.length - 1] = bar;
@@ -122,7 +125,7 @@ const DualOverlayChart = () => {
               return newBars;
             });
           });
-        }, 2000);
+        });
       }
     };
 
@@ -136,28 +139,28 @@ const DualOverlayChart = () => {
 
     const signals = utBotSignals(bars);
 
-    console.log('신호 갯수:', signals.length);
-    signals.forEach(s => {
-      console.log(`신호: ${s.type} 시간: ${new Date(s.time).toLocaleString()}`);
-    });
-
-    const newSignals = signals.filter(s => !alerted.current.has(s.time));
-
-    newSignals.forEach(sig => {
-      toast.info(sig.type === 'buy' ? '📈 UT BOT 매수 신호 발생!' : '📉 UT BOT 매도 신호 발생!', {
-        position: 'bottom-center',
-        autoClose: 5000,
-        pauseOnHover: false,
-        closeOnClick: true,
-        theme: 'colored',
+    const newSignals = signals.filter(sig => !alerted.current.has(sig.time));
+    if (newSignals.length > 0) {
+      newSignals.forEach(sig => {
+        toast.info(
+          sig.type === 'buy' ? `📈 UT BOT 매수 신호 발생! (${new Date(sig.time).toLocaleTimeString()})`
+                             : `📉 UT BOT 매도 신호 발생! (${new Date(sig.time).toLocaleTimeString()})`,
+          {
+            position: 'bottom-center',
+            autoClose: 5000,
+            pauseOnHover: false,
+            closeOnClick: true,
+            theme: 'colored',
+          }
+        );
+        alerted.current.add(sig.time);
       });
-      alerted.current.add(sig.time);
-    });
+    }
   }, [bars]);
 
   return (
     <>
-      <div id="tradingview_chart" ref={containerRef} style={{ width: '100%', height: '100vh' }} />
+      <div ref={containerRef} id="tradingview_chart" style={{ width: '100%', height: '100vh' }} />
       <ToastContainer />
     </>
   );
