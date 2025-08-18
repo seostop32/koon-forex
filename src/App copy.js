@@ -1,7 +1,7 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
-import DualOverlayChart from './components/DualOverlayChart';
+import DualOverlayChart from './components/DualOverlayChart_Back.js';
 // import TradeAlert from './components/TradeAlert';
 import { generateFakeCandles, generateSignals } from './components/signalUtils';
 

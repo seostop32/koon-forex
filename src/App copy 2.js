@@ -1,5 +1,5 @@
 import React from 'react';
-import DualOverlayChart from './components/DualOverlayChart'; // 경로는 네 파일 위치에 맞게 수정해줘
+import DualOverlayChart from './components/DualOverlayChart_Back.js'; // 경로는 네 파일 위치에 맞게 수정해줘
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
